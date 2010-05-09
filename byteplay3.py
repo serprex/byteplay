@@ -1,6 +1,6 @@
 # byteplay: Python assembler/disassembler
 # Copyright (C) 2006 Noam Raphael | Version: http://code.google.com/p/byteplay
-# Rewritten 2009 Demur Rumed | Version: http://serprex.staticfire.co.uk/byteplay.htm
+# Rewritten 2009 Demur Rumed | Version: http://github.com/byteplay
 #                            Screwed the style over, modified stack logic to be more flexible, updated to Python 3
 # 
 # This library is free software; you can redistribute it and/or
