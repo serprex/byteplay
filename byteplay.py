@@ -1,8 +1,8 @@
-# byteplay - Python bytecode assembler/disassembler.
+# byteplay: CPython assembler/disassembler
 # Copyright (C) 2006 Noam Raphael | Version: http://code.google.com/p/byteplay
 # Rewritten 2009 Demur Rumed | Version: http://github.com/serprex/byteplay
 #                            Screwed the style over, modified stack logic to be more flexible, updated to Python 3
-# 
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -30,22 +30,14 @@ from array import array
 from operator import eq,is_
 from itertools import izip
 
-######################################################################
-# Define opcodes and information about them
-
-class Opcode(int):
-	def __repr__(self):return opname[self]
-	__str__=__repr__
-opmap = dict((name.replace('+','_'),Opcode(code))
-		for name,code in opcode.opmap.iteritems()
-		if name!='EXTENDED_ARG')
-opname = dict((code,name) for name,code in opmap.iteritems())
+class Opcode(int):__str__=__repr__=lambda s:opname[s]
+opname={}
+opmap = dict((name.replace('+','_'),Opcode(code)) for name,code in opcode.opmap.iteritems())
+for name,code in opmap.iteritems():
+	opname[code]=name
+	globals()[name]=code
+	__all__.append(name)
 opcodes = set(opname)
-def globalize_opcodes():
-	for name,code in opmap.iteritems():
-		globals()[name] = code
-		__all__.append(name)
-globalize_opcodes()
 cmp_op = opcode.cmp_op
 hasarg = set(x for x in opcodes if x >= opcode.HAVE_ARGUMENT)
 hasconst = set(Opcode(x) for x in opcode.hasconst)
@@ -72,9 +64,8 @@ def getse(op,arg=None):
 	if op in _rf:return _rf[op](arg)
 	raise ValueError,"Unknown "+str(op)+","+str(arg)
 class Label(object):pass
-class SetLinenoType(object):__repr__=lambda s:'SetLineno'
-SetLineno=SetLinenoType()
-def isopcode(x):return type(x) not in (Label,SetLinenoType)
+SetLineno=type("SetLinenoType",(object,),{"__repr__":lambda s:'SetLineno'})
+def isopcode(x):return x is not SetLineno and not isinstance(x,Label)
 CO_OPTIMIZED	= 1# use FAST not NAME
 CO_NEWLOCALS	= 2# cleared for module/exec
 CO_VARARGS	= 4
@@ -153,12 +144,12 @@ class Code(object):
 		cellfree=co.co_cellvars+co.co_freevars
 		code = []
 		n = len(co_code)
-		i = extended_arg=0
+		i=extended_arg=0
 		while i<n:
 			op = Opcode(ord(co_code[i]))
 			if i in labels:code.append((labels[i], None))
 			if i in linestarts:code.append((SetLineno, linestarts[i]))
-			i += 1
+			i+=1
 			if op in hascode:
 				lastop, lastarg = code[-1]
 				if lastop!=LOAD_CONST:raise ValueError, str(op)+" should be preceded by LOAD_CONST code"
@@ -184,20 +175,20 @@ class Code(object):
 				docstring = co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0],basestring) else None)
 	def __eq__(self, other):
 		try:
-			if (	self.freevars != other.freevars or
-				self.args != other.args or
-				self.varargs != other.varargs or
-				self.varkwargs != other.varkwargs or
-				self.newlocals != other.newlocals or
-				self.name != other.name or
-				self.filename != other.filename or
-				self.firstlineno != other.firstlineno or
-				self.docstring != other.docstring or
-				len(self.code) != len(other.code)):return False
+			if(self.freevars != other.freevars or
+			self.args != other.args or
+			self.varargs != other.varargs or
+			self.varkwargs != other.varkwargs or
+			self.newlocals != other.newlocals or
+			self.name != other.name or
+			self.filename != other.filename or
+			self.firstlineno != other.firstlineno or
+			self.docstring != other.docstring or
+			len(self.code) != len(other.code)):return False
 			# This isn't trivial due to labels
 			lmap = {}
 			for (op1, arg1), (op2, arg2) in izip(self.code, other.code):
-				if type(op1) is Label:
+				if isinstance(op1,Label):
 					if lmap.setdefault(arg1,arg2) is not arg2:return False
 				else:
 					if op1 != op2:return False
@@ -212,7 +203,7 @@ class Code(object):
 		code = self.code
 
 		# A mapping from labels to their positions in the code list
-		label_pos = dict((op[0],pos) for pos,op in enumerate(code) if type(op[0]) is Label)
+		label_pos = dict((op[0],pos) for pos,op in enumerate(code) if isinstance(op[0],Label))
 
 		# sf_targets are the targets of SETUP_FINALLY opcodes. They are recorded
 		# because they have special stack behaviour. If an exception was raised
@@ -241,7 +232,7 @@ class Code(object):
 			If the given position was already explored, nothing will be yielded
 			"""
 			op,arg=code[pos]
-			if type(op) is Label:# We should check if we already reached a node only if it is a label
+			if isinstance(op,Label):# We should check if we already reached a node only if it is a label
 				if pos in sf_targets:curstack=curstack[:-1]+(curstack[-1]+2,)
 				if stacks[pos] is None:stacks[pos]=curstack
 				elif stacks[pos]!=curstack:
@@ -340,7 +331,7 @@ class Code(object):
 		co_code = array('B')
 		co_lnotab = array('B')
 		for i, (op, arg) in enumerate(self.code):
-			if type(op) is Label:label_pos[op] = len(co_code)
+			if isinstance(op,Label):label_pos[op] = len(co_code)
 			elif op is SetLineno:
 				incr_lineno = arg - lastlineno
 				incr_pos = len(co_code) - lastlinepos
@@ -362,7 +353,7 @@ class Code(object):
 					if incr_pos or incr_lineno:
 						co_lnotab.append(incr_pos)
 						co_lnotab.append(incr_lineno)
-			elif op==opcode.EXTENDED_ARG:raise ValueError, "EXTENDED_ARG not supported in Code objects"
+			elif op==opcode.EXTENDED_ARG:self.code[i+1][1]|=1<<32
 			elif op not in hasarg:co_code.append(op)
 			else:
 				if op in hasconst:
