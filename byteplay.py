@@ -18,17 +18,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 __version__ = '0.2'
-__all__ = ['opmap', 'opname', 'opcodes', 'hasflow', 'getse',
-		'cmp_op', 'hasarg', 'hasname', 'hasjrel', 'hasjabs',
-		'hasjump', 'haslocal', 'hascompare', 'hasfree', 'hascode',
-		'Opcode', 'SetLineno', 'Label', 'isopcode', 'Code']
-
+__all__ = ['opmap','opname','opcodes','hasflow','getse','cmp_op','hasarg','hasname','hasjrel','hasjabs','hasjump','haslocal','hascompare','hasfree','hascode','Opcode','SetLineno','Label','isopcode','Code']
 import opcode
 from dis import findlabels
 from new import code as newcode
-from array import array
-from operator import eq,is_
 from itertools import izip
+from sys import version_info
 
 class Opcode(int):__str__=__repr__=lambda s:opname[s]
 opname={}
@@ -49,34 +44,34 @@ haslocal = set(Opcode(x) for x in opcode.haslocal)
 hascompare = set(Opcode(x) for x in opcode.hascompare)
 hasfree = set(Opcode(x) for x in opcode.hasfree)
 hascode = set((MAKE_FUNCTION, MAKE_CLOSURE))
-_se={	IMPORT_FROM:1,DUP_TOP:1,LOAD_LOCALS:1,LOAD_CONST:1,LOAD_NAME:1,LOAD_GLOBAL:1,LOAD_FAST:1,LOAD_CLOSURE:1,LOAD_DEREF:1,BUILD_MAP:1,
-	YIELD_VALUE:0,SLICE_0:0,UNARY_POSITIVE:0,UNARY_NEGATIVE:0,UNARY_NOT:0,UNARY_CONVERT:0,UNARY_INVERT:0,GET_ITER:0,LOAD_ATTR:0,IMPORT_NAME:0,ROT_TWO:0,ROT_THREE:0,ROT_FOUR:0,NOP:0,PRINT_NEWLINE:0,DELETE_GLOBAL:0,DELETE_NAME:0,DELETE_FAST:0,
+_se={IMPORT_FROM:1,DUP_TOP:1,LOAD_LOCALS:1,LOAD_CONST:1,LOAD_NAME:1,LOAD_GLOBAL:1,LOAD_FAST:1,LOAD_CLOSURE:1,LOAD_DEREF:1,BUILD_MAP:1,
+	YIELD_VALUE:0,SLICE_0:0,UNARY_POSITIVE:0,UNARY_NEGATIVE:0,UNARY_NOT:0,UNARY_CONVERT:0,UNARY_INVERT:0,GET_ITER:0,LOAD_ATTR:0,IMPORT_NAME:-1,ROT_TWO:0,ROT_THREE:0,ROT_FOUR:0,NOP:0,PRINT_NEWLINE:0,DELETE_GLOBAL:0,DELETE_NAME:0,DELETE_FAST:0,
 	IMPORT_NAME:-1,DELETE_SLICE_0:-1,POP_TOP:-1,PRINT_EXPR:-1,PRINT_ITEM:-1,PRINT_NEWLINE_TO:-1,IMPORT_STAR:-1,DELETE_ATTR:-1,STORE_DEREF:-1,STORE_NAME:-1,STORE_GLOBAL:-1,STORE_FAST:-1,SLICE_1:-1,SLICE_2:-1,BINARY_POWER:-1,BINARY_MULTIPLY:-1,BINARY_DIVIDE:-1,BINARY_FLOOR_DIVIDE:-1,BINARY_TRUE_DIVIDE:-1,BINARY_MODULO:-1,BINARY_ADD:-1,BINARY_SUBTRACT:-1,BINARY_SUBSCR:-1,BINARY_LSHIFT:-1,BINARY_RSHIFT:-1,BINARY_AND:-1,BINARY_XOR:-1,BINARY_OR:-1,COMPARE_OP:-1,INPLACE_POWER:-1,INPLACE_MULTIPLY:-1,INPLACE_DIVIDE:-1,INPLACE_FLOOR_DIVIDE:-1,INPLACE_TRUE_DIVIDE:-1,INPLACE_MODULO:-1,INPLACE_ADD:-1,INPLACE_SUBTRACT:-1,INPLACE_LSHIFT:-1,INPLACE_RSHIFT:-1,INPLACE_AND:-1,INPLACE_XOR:-1,INPLACE_OR:-1,
 	SLICE_3:-2,BUILD_CLASS:-2,STORE_SLICE_0:-2,DELETE_SLICE_1:-2,DELETE_SLICE_2:-2,PRINT_ITEM_TO:-2,LIST_APPEND:-2,DELETE_SUBSCR:-2,STORE_ATTR:-2,
-	DELETE_SLICE_3:-3,STORE_SLICE_1:-3,STORE_SLICE_2:-3,STORE_SUBSCR:-3,EXEC_STMT:-3,
-	STORE_SLICE_3:-4}
-_rf={	CALL_FUNCTION:lambda x:-((x&0xFF00)>>7)-(x&0xFF),CALL_FUNCTION_VAR_KW:lambda x:-((x&0xFF00)>>7)-(x&0xFF)-2,CALL_FUNCTION_VAR:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),CALL_FUNCTION_KW:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),
+	DELETE_SLICE_3:-3,STORE_SLICE_1:-3,STORE_SLICE_2:-3,STORE_SUBSCR:-3,EXEC_STMT:-3,STORE_SLICE_3:-4}
+if version_info[1]==6:_se[STORE_MAP]=-2
+_rf={CALL_FUNCTION:lambda x:-((x&0xFF00)>>7)-(x&0xFF),CALL_FUNCTION_VAR_KW:lambda x:-((x&0xFF00)>>7)-(x&0xFF)-2,CALL_FUNCTION_VAR:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),CALL_FUNCTION_KW:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),
 	DUP_TOPX:lambda x:x,RAISE_VARARGS:lambda x:x,MAKE_FUNCTION:lambda x:x,UNPACK_SEQUENCE:lambda x:x-1,MAKE_CLOSURE:lambda x:x-1,BUILD_TUPLE:lambda x:1-x,BUILD_LIST:lambda x:1-x,BUILD_SLICE:lambda x:1-x}
 hasflow=opcodes-set(_se)-set(_rf)
 def getse(op,arg=None):
 	if op in _se:return _se[op]
-	if arg is None:raise ValueError,str(op)+" requires arg"
+	if arg is None:raise ValueError,"%s requires arg"%op
 	if op in _rf:return _rf[op](arg)
-	raise ValueError,"Unknown "+str(op)+","+str(arg)
+	raise ValueError,"Unknown %s %s"%(op,arg)
 class Label(object):pass
 SetLineno=type("SetLinenoType",(object,),{"__repr__":lambda s:'SetLineno'})
 def isopcode(x):return x is not SetLineno and not isinstance(x,Label)
-CO_OPTIMIZED	= 1# use FAST not NAME
-CO_NEWLOCALS	= 2# cleared for module/exec
-CO_VARARGS	= 4
-CO_VARKEYWORDS	= 8
-CO_NESTED	= 16# ???
-CO_GENERATOR	= 32
-CO_NOFREE	= 64# set if no free or cell
-CO_GENERATOR_ALLOWED		= 0x1000# unused
-CO_FUTURE_DIVISION		= 0x2000
-CO_FUTURE_ABSOLUTE_IMPORT	= 0x4000
-CO_FUTURE_WITH_STATEMENT	= 0x8000
+CO_OPTIMIZED = 1
+CO_NEWLOCALS = 2
+CO_VARARGS = 4
+CO_VARKEYWORDS = 8
+CO_NESTED = 16
+CO_GENERATOR = 32
+CO_NOFREE = 64
+CO_GENERATOR_ALLOWED = 0x1000
+CO_FUTURE_DIVISION = 0x2000
+CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
+CO_FUTURE_WITH_STATEMENT = 0x8000
 
 ######################################################################
 # Define the Code class
@@ -152,7 +147,7 @@ class Code(object):
 			i+=1
 			if op in hascode:
 				lastop, lastarg = code[-1]
-				if lastop!=LOAD_CONST:raise ValueError, str(op)+" should be preceded by LOAD_CONST code"
+				if lastop!=LOAD_CONST:raise ValueError, "%s should be preceded by LOAD_CONST code"%op
 				code[-1]=(LOAD_CONST,Code.from_code(lastarg))
 			if op not in hasarg:code.append((op, None))
 			else:
@@ -198,13 +193,8 @@ class Code(object):
 			return True
 		except:return False
 	def _compute_stacksize(self):
-		# This is done by scanning the code, and computing for each opcode
-		# the stack state at the opcode
 		code = self.code
-
-		# A mapping from labels to their positions in the code list
 		label_pos = dict((op[0],pos) for pos,op in enumerate(code) if isinstance(op[0],Label))
-
 		# sf_targets are the targets of SETUP_FINALLY opcodes. They are recorded
 		# because they have special stack behaviour. If an exception was raised
 		# in the block pushed by a SETUP_FINALLY opcode, the block is popped
@@ -212,25 +202,14 @@ class Code(object):
 		# and 2 objects are pushed. If nothing happened, the block is popped by
 		# a POP_BLOCK opcode and 1 object is pushed by a (LOAD_CONST, None)
 		# operation.
-		#
 		# Our solution is to record the stack state of SETUP_FINALLY targets
 		# as having 3 objects pushed, which is the maximum. However, to make
 		# stack recording consistent, the get_next_stacks function will always
 		# yield the stack state of the target as if 1 object was pushed, but
 		# this will be corrected in the actual stack recording.
-
 		sf_targets = set(label_pos[arg] for op,arg in code if op == SETUP_FINALLY)
-
-		# What we compute - for each opcode, its stack state, as an n-tuple.
-		# n is the number of blocks pushed. For each block, we record the number
-		# of objects pushed.f
 		stacks = [None] * len(code)
-
 		def get_next_stacks(pos, curstack):
-			"""Get a code pos and the stack state before the operation was done,
-			and yield pos,curstack pairs for the next pos to be explored
-			If the given position was already explored, nothing will be yielded
-			"""
 			op,arg=code[pos]
 			if isinstance(op,Label):# We should check if we already reached a node only if it is a label
 				if pos in sf_targets:curstack=curstack[:-1]+(curstack[-1]+2,)
@@ -239,45 +218,26 @@ class Code(object):
 					op=pos+1
 					while code[op][0] not in hasflow:op+=1
 					if code[op][0] in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):return
-					raise ValueError,"Inconsistent code at "+str(pos)+" "+str(curstack)+" "+str(stacks[pos])+"\n"+str(code[pos-5:pos+4])
+					raise ValueError,"Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4])
 				else:return
-			def newstack(n):# Return a new stack, modified by adding n elements to the last block
-				if curstack[-1]+n<0:raise ValueError,"Popped a non-existing element at "+str(pos)+" "+str(code[pos-3:pos+2])
+			def newstack(n):
+				if curstack[-1]<-n:raise ValueError,"Popped a non-existing element at %s %s"%(pos,code[pos-3:pos+2])
 				return curstack[:-1]+(curstack[-1]+n,)
 			pos+=1
-			if not isopcode(op):yield pos,curstack
-			elif op not in hasflow:yield pos,newstack(getse(op,arg))
-			elif op == FOR_ITER:
-				yield label_pos[arg],newstack(-1)
-				yield pos,newstack(1)
-			elif op in (JUMP_FORWARD,JUMP_ABSOLUTE):yield label_pos[arg],curstack
-			elif op in (JUMP_IF_FALSE,JUMP_IF_TRUE):
-				yield label_pos[arg],curstack
-				yield pos,curstack
-			elif op in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):return
-			elif op == CONTINUE_LOOP:yield label_pos[arg],curstack[:-1]
-			elif op == SETUP_LOOP:#Continue with new block. On break, we jump to the label and pop block
-				yield pos,curstack+(0,)
-				yield label_pos[arg],curstack
-			elif op == SETUP_EXCEPT:#Continue with new block. On exception, we jump to the label with 3 pushes
-				yield pos,curstack+(0,)
-				yield label_pos[arg],newstack(3)
-			elif op == SETUP_FINALLY:
-				#We continue with a new block
-				#On exception, we jump to the label with 3 extra objects on
-				#stack, but to keep stack recording consistent, we behave as
-				#if we add only 1 object. Extra 2 will be added to the actual recording
-				yield pos,curstack+(0,)
-				yield label_pos[arg],newstack(1)
-			elif op == POP_BLOCK:yield pos,curstack[:-1]
-			elif op == END_FINALLY:yield pos,newstack(-3)
-			elif op == WITH_CLEANUP:yield pos,newstack(-1)
-			else:raise ValueError,"Unhandled opcode "+str(op)
-
-
-		#Now comes the calculation: op holds positions which are yet to be explored
-		#In each step we take a position, and explore by adding the positions from it to op
-		#On the way, we update maxsize. op is a list of (pos,stack) tuples
+			if not isopcode(op):return (pos,curstack),
+			elif op not in hasflow:return (pos,newstack(getse(op,arg))),
+			elif op == FOR_ITER:return (label_pos[arg],newstack(-1)),(pos,newstack(1))
+			elif op in (JUMP_FORWARD,JUMP_ABSOLUTE):return (label_pos[arg],curstack),
+			elif op in (JUMP_IF_FALSE,JUMP_IF_TRUE):return (label_pos[arg],curstack),(pos,curstack)
+			elif op in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):return ()
+			elif op == CONTINUE_LOOP:return (label_pos[arg],curstack[:-1]),
+			elif op == SETUP_LOOP:return (pos,curstack+(0,)),(label_pos[arg],curstack)
+			elif op == SETUP_EXCEPT:return (pos,curstack+(0,)),(label_pos[arg],newstack(3))
+			elif op == SETUP_FINALLY:return (pos,curstack+(0,)),(label_pos[arg],newstack(1))
+			elif op == POP_BLOCK:return (pos,curstack[:-1]),
+			elif op == END_FINALLY:return (pos,newstack(-3)),
+			elif op == WITH_CLEANUP:return (pos,newstack(-1)),
+			else:raise ValueError("Unhandled opcode %s"%op)
 		maxsize=0
 		op = [(0, (0,))]
 		while op:
@@ -306,19 +266,13 @@ class Code(object):
 				and arg not in co_freevars)
 		co_cellvars = [jumps for jumps in self.args if jumps in cellvars]
 
-		def index(seq, item, eq=eq, can_append=True):
-			"""Find the index of item in a sequence and return it.
-			If it is not found in the sequence, and can_append is True,
-			it is appended to the sequence.
-
-			eq is the equality operator to use.
-			"""
+		def index(seq, item, eq=True, can_append=True):
 			for i,x in enumerate(seq):
-				if eq(x,item):return i
+				if x==item if eq else x is item:return i
 			if can_append:
 				seq.append(item)
 				return len(seq)-1
-			else:raise IndexError, "Item not found"
+			else:raise IndexError,"Item not found"
 
 		# List of tuples (pos, label) to be filled later
 		jumps = []
@@ -327,9 +281,7 @@ class Code(object):
 		# Last SetLineno
 		lastlineno = self.firstlineno
 		lastlinepos = 0
-
-		co_code = array('B')
-		co_lnotab = array('B')
+		co_code = co_lnotab = b""
 		for i, (op, arg) in enumerate(self.code):
 			if isinstance(op,Label):label_pos[op] = len(co_code)
 			elif op is SetLineno:
@@ -337,48 +289,38 @@ class Code(object):
 				incr_pos = len(co_code) - lastlinepos
 				lastlineno = arg
 				lastlinepos += incr_pos
-				if not (incr_lineno or incr_pos):
-					co_lnotab.append(0)
-					co_lnotab.append(0)
+				if not (incr_lineno or incr_pos):co_lnotab+=b"\0\0"
 				else:
 					while incr_pos > 255:
-						co_lnotab.append(255)
-						co_lnotab.append(0)
+						co_lnotab+=b"\xFF\0"
 						incr_pos -= 255
 					while incr_lineno > 255:
-						co_lnotab.append(incr_pos)
-						co_lnotab.append(255)
+						co_lnotab+=b"%c\xFF"%incr_pos
 						incr_pos = 0
 						incr_lineno -= 255
 					if incr_pos or incr_lineno:
-						co_lnotab.append(incr_pos)
-						co_lnotab.append(incr_lineno)
+						co_lnotab+=b"%c%c"%(incr_pos,incr_lineno)
 			elif op==opcode.EXTENDED_ARG:self.code[i+1][1]|=1<<32
-			elif op not in hasarg:co_code.append(op)
+			elif op not in hasarg:co_code+=b"%c"%op
 			else:
 				if op in hasconst:
 					if isinstance(arg,Code) and i+1<len(self.code) and self.code[i+1][0] in hascode:arg=arg.to_code()
-					arg=index(co_consts,arg,is_)
+					arg=index(co_consts,arg,0)
 				elif op in hasname:arg=index(co_names, arg)
-				elif op in hasjump:# arg will be filled later
+				elif op in hasjump:
 					jumps.append((len(co_code),arg))
-					arg=0
+					arg=None
 				elif op in haslocal:arg=index(co_varnames,arg)
 				elif op in hascompare:arg=index(cmp_op,arg,can_append=False)
 				elif op in hasfree:
 					try:arg=index(co_freevars,arg,can_append=False)+len(cellvars)
-					except IndexError:arg=index(co_cellvars, arg)
-				if arg>0xFFFF:
-					co_code.append(opcode.EXTENDED_ARG)
-					co_code.append(arg>>16&0xFF)
-					co_code.append(arg>>24&0xFF)
-				co_code.append(op)
-				co_code.append(arg&0xFF)
-				co_code.append(arg>>8&0xFF)
+					except IndexError:arg=index(co_cellvars,arg)
+				if arg>0xFFFF:co_code+=b"%c%c%c"%(opcode.EXTENDED_ARG,arg>>16&0xFF,arg>>24&0xFF)
+				co_code+=b"%c%%s%%s"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
+		arg=[]
 		for pos,label in jumps:
 			jump=label_pos[label]
 			if co_code[pos] in hasjrel:jump-=pos+3
-			if jump>0xFFFF:raise NotImplementedError, "Extended jumps not implemented"
-			co_code[pos+1]=jump&0xFF
-			co_code[pos+2]=jump>>8&0xFF
-		return newcode(co_argcount,len(co_varnames),co_stacksize,co_flags,co_code.tostring(),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,co_lnotab.tostring(),co_freevars,tuple(co_cellvars))
+			if jump>0xFFFF:raise NotImplementedError,"Extended jumps not implemented"
+			arg+=jump&0xFF,jump>>8&0xFF
+		return newcode(co_argcount,len(co_varnames),co_stacksize,co_flags,co_code%tuple(arg),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,co_lnotab,co_freevars,tuple(co_cellvars))
