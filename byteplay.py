@@ -316,7 +316,7 @@ class Code(object):
 					try:arg=index(co_freevars,arg,can_append=False)+len(cellvars)
 					except IndexError:arg=index(co_cellvars,arg)
 				if arg>0xFFFF:co_code+=b"%c%c%c"%(opcode.EXTENDED_ARG,arg>>16&0xFF,arg>>24&0xFF)
-				co_code+=b"%c%%s%%s"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
+				co_code+=b"%c%%c%%c"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
 		arg=[]
 		for pos,label in jumps:
 			jump=label_pos[label]
