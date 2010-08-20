@@ -202,12 +202,12 @@ class Code(object):
 		# and 3 objects are pushed. On return or continue, the block is popped
 		# and 2 objects are pushed. If nothing happened, the block is popped by
 		# a POP_BLOCK opcode and 1 object is pushed by a (LOAD_CONST, None)
-		# operation.
+		# operation
 		# Our solution is to record the stack state of SETUP_FINALLY targets
 		# as having 3 objects pushed, which is the maximum. However, to make
 		# stack recording consistent, the get_next_stacks function will always
 		# yield the stack state of the target as if 1 object was pushed, but
-		# this will be corrected in the actual stack recording.
+		# this will be corrected in the actual stack recording
 		sf_targets={label_pos[arg] for op,arg in code if op==SETUP_FINALLY}
 		stacks=[None]*len(code)
 		def get_next_stacks(pos, curstack):
@@ -278,11 +278,8 @@ class Code(object):
 				return len(seq)-1
 			else:raise IndexError("Item not found")
 
-		# List of tuples (pos, label) to be filled later
 		jumps = []
-		# A mapping from a label to its position
 		label_pos = {}
-		# Last SetLineno
 		lastlineno = self.firstlineno
 		lastlinepos = 0
 		co_code = co_lnotab = b""

@@ -201,48 +201,46 @@ class Code(object):
 		# and 3 objects are pushed. On return or continue, the block is popped
 		# and 2 objects are pushed. If nothing happened, the block is popped by
 		# a POP_BLOCK opcode and 1 object is pushed by a (LOAD_CONST, None)
-		# operation.
+		# operation
 		# Our solution is to record the stack state of SETUP_FINALLY targets
 		# as having 3 objects pushed, which is the maximum. However, to make
 		# stack recording consistent, the get_next_stacks function will always
 		# yield the stack state of the target as if 1 object was pushed, but
-		# this will be corrected in the actual stack recording.
+		# this will be corrected in the actual stack recording
 		sf_targets = set(label_pos[arg] for op,arg in code if op == SETUP_FINALLY)
 		stacks = [None] * len(code)
-		def get_next_stacks(pos, curstack):
-			op,arg=code[pos]
-			if isinstance(op,Label):# We should check if we already reached a node only if it is a label
+		maxsize=0
+		op = [(0, (0,))]
+		def newstack(n):
+			if curstack[-1]<-n:raise ValueError,"Popped a non-existing element at %s %s"%(pos,code[pos-3:pos+2])
+			return curstack[:-1]+(curstack[-1]+n,)
+		while op:
+			pos,curstack=op.pop()
+			o,arg=code[pos]
+			if isinstance(o,Label):
 				if pos in sf_targets:curstack=curstack[:-1]+(curstack[-1]+2,)
 				if stacks[pos] is None:stacks[pos]=curstack
 				elif stacks[pos]!=curstack:
-					op=pos+1
-					while code[op][0] not in hasflow:op+=1
-					if code[op][0] in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):return
-					raise ValueError,"Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4])
-				else:return
-			def newstack(n):
-				if curstack[-1]<-n:raise ValueError,"Popped a non-existing element at %s %s"%(pos,code[pos-3:pos+2])
-				return curstack[:-1]+(curstack[-1]+n,)
-			pos+=1
-			if not isopcode(op):return (pos,curstack),
-			elif op not in hasflow:return (pos,newstack(getse(op,arg))),
-			elif op == FOR_ITER:return (label_pos[arg],newstack(-1)),(pos,newstack(1))
-			elif op in (JUMP_FORWARD,JUMP_ABSOLUTE):return (label_pos[arg],curstack),
-			elif op in (JUMP_IF_FALSE,JUMP_IF_TRUE):return (label_pos[arg],curstack),(pos,curstack)
-			elif op in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):return ()
-			elif op == CONTINUE_LOOP:return (label_pos[arg],curstack[:-1]),
-			elif op == SETUP_LOOP:return (pos,curstack+(0,)),(label_pos[arg],curstack)
-			elif op == SETUP_EXCEPT:return (pos,curstack+(0,)),(label_pos[arg],newstack(3))
-			elif op == SETUP_FINALLY:return (pos,curstack+(0,)),(label_pos[arg],newstack(1))
-			elif op == POP_BLOCK:return (pos,curstack[:-1]),
-			elif op == END_FINALLY:return (pos,newstack(-3)),
-			elif op == WITH_CLEANUP:return (pos,newstack(-1)),
-			else:raise ValueError("Unhandled opcode %s"%op)
-		maxsize=0
-		op = [(0, (0,))]
-		while op:
-			pos,curstack=op.pop()
-			op+=get_next_stacks(pos,curstack)
+					o=pos+1
+					while code[o][0] not in hasflow:o+=1
+					if code[o][0] not in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):raise ValueError,"Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4])
+					pos=None
+				else:pos=None
+			if pos is not None and o not in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):
+				pos+=1
+				if not isopcode(o):op+=(pos,curstack),
+				elif o not in hasflow:op+=(pos,newstack(getse(o,arg))),
+				elif o == FOR_ITER:op+=(label_pos[arg],newstack(-1)),(pos,newstack(1))
+				elif o in (JUMP_FORWARD,JUMP_ABSOLUTE):op+=(label_pos[arg],curstack),
+				elif o in (JUMP_IF_FALSE,JUMP_IF_TRUE):op+=(label_pos[arg],curstack),(pos,curstack)
+				elif o == CONTINUE_LOOP:op+=(label_pos[arg],curstack[:-1]),
+				elif o == SETUP_LOOP:op+=(pos,curstack+(0,)),(label_pos[arg],curstack)
+				elif o == SETUP_EXCEPT:op+=(pos,curstack+(0,)),(label_pos[arg],newstack(3))
+				elif o == SETUP_FINALLY:op+=(pos,curstack+(0,)),(label_pos[arg],newstack(1))
+				elif o == POP_BLOCK:op+=(pos,curstack[:-1]),
+				elif o == END_FINALLY:op+=(pos,newstack(-3)),
+				elif o == WITH_CLEANUP:op+=(pos,newstack(-1)),
+				else:raise ValueError("Unhandled opcode %s"%op)
 			curstack=sum(curstack)
 			if curstack>maxsize:maxsize=curstack
 		return maxsize
@@ -274,11 +272,8 @@ class Code(object):
 				return len(seq)-1
 			else:raise IndexError,"Item not found"
 
-		# List of tuples (pos, label) to be filled later
 		jumps = []
-		# A mapping from a label to its position
 		label_pos = {}
-		# Last SetLineno
 		lastlineno = self.firstlineno
 		lastlinepos = 0
 		co_code = co_lnotab = b""
