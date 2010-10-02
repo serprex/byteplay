@@ -20,6 +20,7 @@
 __version__ = '0.3'
 __all__ = ['opmap','opname','opcodes','hasflow','getse','cmp_op','hasarg','hasname','hasjrel','hasjabs','hasjump','haslocal','hascompare','hasfree','hascode','Opcode','SetLineno','Label','isopcode','Code']
 import opcode
+from sys import version_info
 from dis import findlabels
 from types import CodeType
 
@@ -42,11 +43,15 @@ hascompare = {Opcode(x) for x in opcode.hascompare}
 hasfree = {Opcode(x) for x in opcode.hasfree}
 hascode = {MAKE_FUNCTION,MAKE_CLOSURE}
 _se={IMPORT_FROM:1,DUP_TOP:1,LOAD_CONST:1,LOAD_NAME:1,LOAD_GLOBAL:1,LOAD_FAST:1,LOAD_CLOSURE:1,LOAD_DEREF:1,BUILD_MAP:1,LOAD_BUILD_CLASS:1,
-	YIELD_VALUE:0,UNARY_POSITIVE:0,UNARY_NEGATIVE:0,UNARY_NOT:0,UNARY_INVERT:0,GET_ITER:0,LOAD_ATTR:0,IMPORT_NAME:0,ROT_TWO:0,ROT_THREE:0,ROT_FOUR:0,NOP:0,DELETE_GLOBAL:0,DELETE_NAME:0,DELETE_FAST:0,STORE_LOCALS:0,
+	YIELD_VALUE:0,UNARY_POSITIVE:0,UNARY_NEGATIVE:0,UNARY_NOT:0,UNARY_INVERT:0,GET_ITER:0,LOAD_ATTR:0,IMPORT_NAME:0,ROT_TWO:0,ROT_THREE:0,NOP:0,DELETE_GLOBAL:0,DELETE_NAME:0,DELETE_FAST:0,STORE_LOCALS:0,
 	IMPORT_NAME:-1,POP_TOP:-1,PRINT_EXPR:-1,IMPORT_STAR:-1,DELETE_ATTR:-1,STORE_DEREF:-1,STORE_NAME:-1,STORE_GLOBAL:-1,STORE_FAST:-1,BINARY_POWER:-1,BINARY_MULTIPLY:-1,BINARY_FLOOR_DIVIDE:-1,BINARY_TRUE_DIVIDE:-1,BINARY_MODULO:-1,BINARY_ADD:-1,BINARY_SUBTRACT:-1,BINARY_SUBSCR:-1,BINARY_LSHIFT:-1,BINARY_RSHIFT:-1,BINARY_AND:-1,BINARY_XOR:-1,BINARY_OR:-1,COMPARE_OP:-1,INPLACE_POWER:-1,INPLACE_MULTIPLY:-1,INPLACE_FLOOR_DIVIDE:-1,INPLACE_TRUE_DIVIDE:-1,INPLACE_MODULO:-1,INPLACE_ADD:-1,INPLACE_SUBTRACT:-1,INPLACE_LSHIFT:-1,INPLACE_RSHIFT:-1,INPLACE_AND:-1,INPLACE_XOR:-1,INPLACE_OR:-1,LIST_APPEND:-1,SET_ADD:-1,
 	DELETE_SUBSCR:-2,STORE_ATTR:-2,STORE_MAP:-2,MAP_ADD:-2,STORE_SUBSCR:-3}
 _rf={CALL_FUNCTION:lambda x:-((x&0xFF00)>>7)-(x&0xFF),CALL_FUNCTION_VAR_KW:lambda x:-((x&0xFF00)>>7)-(x&0xFF)-2,CALL_FUNCTION_VAR:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),CALL_FUNCTION_KW:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),
-	DUP_TOPX:lambda x:x,RAISE_VARARGS:lambda x:x,MAKE_FUNCTION:lambda x:x,UNPACK_EX:lambda x:(x&0xFF)+(x>>8),UNPACK_SEQUENCE:lambda x:x-1,MAKE_CLOSURE:lambda x:x-1,BUILD_TUPLE:lambda x:1-x,BUILD_LIST:lambda x:1-x,BUILD_SET:lambda x:1-x,BUILD_SLICE:lambda x:1-x}
+	RAISE_VARARGS:lambda x:x,MAKE_FUNCTION:lambda x:x,UNPACK_EX:lambda x:(x&0xFF)+(x>>8),UNPACK_SEQUENCE:lambda x:x-1,MAKE_CLOSURE:lambda x:x-1,BUILD_TUPLE:lambda x:1-x,BUILD_LIST:lambda x:1-x,BUILD_SET:lambda x:1-x,BUILD_SLICE:lambda x:1-x}
+if version_info[0]>2 and version_info[1]>1:_se[DUP_TOP_TWO]=2
+else:
+	_se[ROT_FOUR]=0
+	_rf[DUP_TOPX]=lambda x:x
 hasflow=opcodes-set(_se)-set(_rf)
 def getse(op,arg=None):
 	if op in _se:return _se[op]
