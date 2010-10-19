@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
 __version__ = '0.2'
 __all__ = ['opmap','opname','opcodes','hasflow','getse','cmp_op','hasarg','hasname','hasjrel','hasjabs','hasjump','haslocal','hascompare','hasfree','hascode','Opcode','SetLineno','Label','isopcode','Code']
 import opcode
@@ -24,7 +23,6 @@ from dis import findlabels
 from new import code as newcode
 from itertools import izip
 from sys import version_info
-
 class Opcode(int):__str__=__repr__=lambda s:opname[s]
 opname={}
 opmap = dict((name.replace('+','_'),Opcode(code)) for name,code in opcode.opmap.iteritems())
@@ -74,7 +72,7 @@ CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
 CO_FUTURE_WITH_STATEMENT = 0x8000
 class Code(object):
 	"""An object which holds all the information which a Python code object
-	holds, but in an easy-to-play-with representation.
+	holds, but in an easy-to-play-with representation
 
 	The attributes are:
 
@@ -96,8 +94,7 @@ class Code(object):
 				if it's str or unicode)
 
 	code is a list of 2-tuples. The first item is an opcode, or SetLineno, or a
-	Label instance. The second item is the argument, if applicable, or None.
-	"""
+	Label instance. The second item is the argument, if applicable, or None"""
 	def __init__(self,code,freevars,args,varargs,varkwargs,newlocals,name,filename,firstlineno,docstring):
 		self.code = code
 		self.freevars = freevars
@@ -109,13 +106,11 @@ class Code(object):
 		self.filename = filename
 		self.firstlineno = firstlineno
 		self.docstring = docstring
-
 	@staticmethod
 	def _findlinestarts(code):
 		"""Find the offsets in a byte code which are start of lines in the source
 		Generate pairs offset,lineno as described in Python/compile.c
-		This is a modified version of dis.findlinestarts, which allows multiplelinestarts with the same line number
-		"""
+		This is a modified version of dis.findlinestarts, which allows multiplelinestarts with the same line number"""
 		lineno = code.co_firstlineno
 		addr = 0
 		for byte_incr,line_incr in izip(map(ord,code.co_lnotab[0::2]),map(ord,code.co_lnotab[1::2])):
@@ -126,7 +121,7 @@ class Code(object):
 		yield addr,lineno
 	@classmethod
 	def from_code(cls, co):
-		"""Disassemble a Python code object into a Code object."""
+		"""Disassemble a Python code object into a Code object"""
 		co_code=co.co_code
 		labels=dict((addr,Label()) for addr in findlabels(co_code))
 		linestarts=dict(cls._findlinestarts(co))
@@ -152,7 +147,7 @@ class Code(object):
 				else:code.append((op,co.co_consts[arg] if op in hasconst else co.co_names[arg] if op in hasname else labels[arg] if op in hasjabs else labels[i+arg] if op in hasjrel else co.co_varnames[arg] if op in haslocal else cmp_op[arg] if op in hascompare else cellfree[arg] if op in hasfree else arg))
 		varargs = not not co.co_flags&CO_VARARGS
 		varkwargs = not not co.co_flags&CO_VARKEYWORDS
-		return cls(	code = code,
+		return cls(code = code,
 				freevars = co.co_freevars,
 				args = co.co_varnames[:co.co_argcount+varargs+varkwargs],
 				varargs = varargs,
@@ -237,9 +232,8 @@ class Code(object):
 					while code[o][0] not in hasflow:o+=1
 					if code[o][0] not in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):raise ValueError,"Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4])
 		return maxsize
-
 	def to_code(self):
-		"""Assemble a Python code object from a Code object."""
+		"""Assemble a Python code object from a Code object"""
 		co_argcount = len(self.args) - self.varargs - self.varkwargs
 		co_stacksize = self._compute_stacksize()
 		co_flags=set(op[0] for op in self.code)
@@ -248,7 +242,6 @@ class Code(object):
 		co_names = []
 		co_varnames = list(self.args)
 		co_freevars = tuple(self.freevars)
-
 		#Find all cellvars beforehand for two reasons
 		#Need the number of them to construct the numeric arg for ops in hasfree
 		#Need to put args which are cells in the beginning of co_cellvars

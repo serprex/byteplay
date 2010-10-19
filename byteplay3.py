@@ -16,14 +16,12 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
 __version__ = '0.3'
 __all__ = ['opmap','opname','opcodes','hasflow','getse','cmp_op','hasarg','hasname','hasjrel','hasjabs','hasjump','haslocal','hascompare','hasfree','hascode','Opcode','SetLineno','Label','isopcode','Code']
 import opcode
 from sys import version_info
 from dis import findlabels
 from types import CodeType
-
 class Opcode(int):__str__=__repr__=lambda s:opname[s]
 opmap = {name.replace('+','_'):Opcode(code) for name,code in opcode.opmap.items()}
 opname = {code:name for name,code in opmap.items()}
@@ -48,7 +46,9 @@ _se={IMPORT_FROM:1,DUP_TOP:1,LOAD_CONST:1,LOAD_NAME:1,LOAD_GLOBAL:1,LOAD_FAST:1,
 	DELETE_SUBSCR:-2,STORE_ATTR:-2,STORE_MAP:-2,MAP_ADD:-2,STORE_SUBSCR:-3}
 _rf={CALL_FUNCTION:lambda x:-((x&0xFF00)>>7)-(x&0xFF),CALL_FUNCTION_VAR_KW:lambda x:-((x&0xFF00)>>7)-(x&0xFF)-2,CALL_FUNCTION_VAR:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),CALL_FUNCTION_KW:lambda x:-((x&0xFF00)>>7|1)-(x&0xFF),
 	RAISE_VARARGS:lambda x:x,MAKE_FUNCTION:lambda x:x,UNPACK_EX:lambda x:(x&0xFF)+(x>>8),UNPACK_SEQUENCE:lambda x:x-1,MAKE_CLOSURE:lambda x:x-1,BUILD_TUPLE:lambda x:1-x,BUILD_LIST:lambda x:1-x,BUILD_SET:lambda x:1-x,BUILD_SLICE:lambda x:1-x}
-if version_info[0]>2 and version_info[1]>1:_se[DUP_TOP_TWO]=2
+if version_info[1]>1:
+	_se[DUP_TOP_TWO]=2
+	_se[DELETE_DEREF]=0
 else:
 	_se[ROT_FOUR]=0
 	_rf[DUP_TOPX]=lambda x:x
@@ -58,7 +58,7 @@ def getse(op,arg=None):
 	if arg is None:raise ValueError("%s requires arg"%op)
 	if op in _rf:return _rf[op](arg)
 	raise ValueError("Unknown %s %s"%(op,arg))
-class Label(object):pass
+class Label:pass
 SetLineno=type("SetLinenoType",(object,),{"__repr__":lambda s:'SetLineno'})
 def isopcode(x):return x is not SetLineno and not isinstance(x,Label)
 CO_OPTIMIZED = 1
@@ -74,7 +74,7 @@ CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
 CO_FUTURE_WITH_STATEMENT = 0x8000
 class Code(object):
 	"""An object which holds all the information which a Python code object
-	holds, but in an easy-to-play-with representation.
+	holds, but in an easy-to-play-with representation
 
 	The attributes are:
 
@@ -85,7 +85,7 @@ class Code(object):
 	args - list of strings: the arguments of the code
 	varargs - boolean: Does args end with a '*args' argument
 	varkwargs - boolean: Does args end with a '**kwargs' argument
-	newlocals - boolean: Should a new local namespace be created.
+	newlocals - boolean: Should a new local namespace be created
 				(True in functions, False for module and exec code)
 
 	Not affecting action
@@ -96,8 +96,7 @@ class Code(object):
 				if it's str or unicode)
 
 	code is a list of 2-tuples. The first item is an opcode, or SetLineno, or a
-	Label instance. The second item is the argument, if applicable, or None.
-	"""
+	Label instance. The second item is the argument, if applicable, or None"""
 	def __init__(self,code,freevars,args,kwonly,varargs,varkwargs,newlocals,name,filename,firstlineno,docstring):
 		self.code = code
 		self.freevars = freevars
@@ -110,13 +109,11 @@ class Code(object):
 		self.filename = filename
 		self.firstlineno = firstlineno
 		self.docstring = docstring
-
 	@staticmethod
 	def _findlinestarts(code):
 		"""Find the offsets in a byte code which are start of lines in the source
 		Generate pairs offset,lineno as described in Python/compile.c
-		This is a modified version of dis.findlinestarts, which allows multiplelinestarts with the same line number
-		"""
+		This is a modified version of dis.findlinestarts, which allows multiplelinestarts with the same line number"""
 		lineno = code.co_firstlineno
 		addr = 0
 		for byte_incr,line_incr in zip(code.co_lnotab[0::2],code.co_lnotab[1::2]):
@@ -127,7 +124,7 @@ class Code(object):
 		yield addr,lineno
 	@classmethod
 	def from_code(cls, co):
-		"""Disassemble a Python code object into a Code object."""
+		"""Disassemble a Python code object into a Code object"""
 		co_code=co.co_code
 		labels={addr:Label() for addr in findlabels(co_code)}
 		linestarts=dict(cls._findlinestarts(co))
@@ -153,7 +150,7 @@ class Code(object):
 				else:code.append((op,co.co_consts[arg] if op in hasconst else co.co_names[arg] if op in hasname else labels[arg] if op in hasjabs else labels[i+arg] if op in hasjrel else co.co_varnames[arg] if op in haslocal else cmp_op[arg] if op in hascompare else cellfree[arg] if op in hasfree else arg))
 		varargs = not not co.co_flags&CO_VARARGS
 		varkwargs = not not co.co_flags&CO_VARKEYWORDS
-		return cls(	code = code,
+		return cls(code = code,
 				freevars = co.co_freevars,
 				args = co.co_varnames[:co.co_argcount+varargs+varkwargs],
 				kwonly = co.co_kwonlyargcount,
@@ -242,9 +239,8 @@ class Code(object):
 					while code[op][0] not in hasflow:op+=1
 					if code[op][0] not in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):raise ValueError("Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4]))
 		return maxsize
-
 	def to_code(self):
-		"""Assemble a Python code object from a Code object."""
+		"""Assemble a Python code object from a Code object"""
 		co_argcount = len(self.args) - self.varargs - self.varkwargs
 		co_stacksize = self._compute_stacksize()
 		co_flags={op[0] for op in self.code}
@@ -253,7 +249,6 @@ class Code(object):
 		co_names = []
 		co_varnames = list(self.args)
 		co_freevars = tuple(self.freevars)
-
 		#Find all cellvars beforehand for two reasons
 		#Need the number of them to construct the numeric arg for ops in hasfree
 		#Need to put args which are cells in the beginning of co_cellvars
@@ -261,7 +256,6 @@ class Code(object):
 				if isopcode(op) and op in hasfree
 				and arg not in co_freevars}
 		co_cellvars = [jumps for jumps in self.args if jumps in cellvars]
-
 		def index(seq, item, eq=True, can_append=True):
 			for i,x in enumerate(seq):
 				if x==item if eq else x is item:return i
@@ -269,7 +263,6 @@ class Code(object):
 				seq.append(item)
 				return len(seq)-1
 			else:raise IndexError("Item not found")
-
 		jumps = []
 		label_pos = {}
 		lastlineno = self.firstlineno
