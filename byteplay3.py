@@ -307,6 +307,6 @@ class Code(object):
 		for pos,label in jumps:
 			jump=label_pos[label]
 			if co_code[pos] in hasjrel:jump-=pos+3
-			if jump>0xFFFF:raise NotImplementedError,"Extended jumps not implemented"
+			if jump>0xFFFF:raise NotImplementedError("Extended jumps not implemented")
 			arg+=jump&0xFF,jump>>8&0xFF
 		return CodeType(co_argcount,self.kwonly,len(co_varnames),co_stacksize,co_flags,co_code%tuple(arg),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,co_lnotab,co_freevars,tuple(co_cellvars))
