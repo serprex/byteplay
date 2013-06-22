@@ -267,7 +267,8 @@ class Code(object):
 		label_pos = {}
 		lastlineno = self.firstlineno
 		lastlinepos = 0
-		co_code = co_lnotab = b""
+		co_code = bytearray()
+		co_lnotab = bytearray()
 		for i, (op, arg) in enumerate(self.code):
 			if isinstance(op,Label):label_pos[op] = len(co_code)
 			elif op is SetLineno:
@@ -275,19 +276,19 @@ class Code(object):
 				incr_pos = len(co_code) - lastlinepos
 				lastlineno = arg
 				lastlinepos += incr_pos
-				if not (incr_lineno or incr_pos):co_lnotab+=b"\0\0"
+				if not (incr_lineno or incr_pos):co_lnotab += b"\0\0"
 				else:
 					while incr_pos > 255:
-						co_lnotab+=b"\xFF\0"
+						co_lnotab += b"\xFF\0"
 						incr_pos -= 255
 					while incr_lineno > 255:
-						co_lnotab+=b"%c\xFF"%incr_pos
+						co_lnotab += bytes((incr_pos,255))
 						incr_pos = 0
 						incr_lineno -= 255
 					if incr_pos or incr_lineno:
-						co_lnotab+=b"%c%c"%(incr_pos,incr_lineno)
-			elif op==opcode.EXTENDED_ARG:self.code[i+1][1]|=1<<32
-			elif op not in hasarg:co_code+=b"%c"%op
+						co_lnotab += bytes((incr_pos,incr_lineno))
+			elif op==opcode.EXTENDED_ARG:self.code[i+1][1] |= 1<<32
+			elif op not in hasarg:co_code += bytes((op,))
 			else:
 				if op in hasconst:
 					if isinstance(arg,Code) and i+1<len(self.code) and self.code[i+1][0] in hascode:arg=arg.to_code()
@@ -295,18 +296,19 @@ class Code(object):
 				elif op in hasname:arg=index(co_names, arg)
 				elif op in hasjump:
 					jumps.append((len(co_code),arg))
-					arg=None
+					co_code += bytes((op, 0, 0))
+					continue
 				elif op in haslocal:arg=index(co_varnames,arg)
 				elif op in hascompare:arg=index(cmp_op,arg,can_append=False)
 				elif op in hasfree:
 					try:arg=index(co_freevars,arg,can_append=False)+len(cellvars)
 					except IndexError:arg=index(co_cellvars,arg)
-				if arg>0xFFFF:co_code+=b"%c%c%c"%(opcode.EXTENDED_ARG,arg>>16&0xFF,arg>>24&0xFF)
-				co_code+=b"%c%%c%%c"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
-		arg=[]
+				if arg>0xFFFF:co_code += bytes((opcode.EXTENDED_ARG,arg>>16&0xFF,arg>>24&0xFF))
+				co_code += bytes((op,arg&0xFF,arg>>8&0xFF))
 		for pos,label in jumps:
 			jump=label_pos[label]
 			if co_code[pos] in hasjrel:jump-=pos+3
 			if jump>0xFFFF:raise NotImplementedError("Extended jumps not implemented")
-			arg+=jump&0xFF,jump>>8&0xFF
-		return CodeType(co_argcount,self.kwonly,len(co_varnames),co_stacksize,co_flags,co_code%tuple(arg),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,co_lnotab,co_freevars,tuple(co_cellvars))
+			co_code[pos+1]=jump&0xFF
+			co_code[pos+2]=jump>>8&0xFF
+		return CodeType(co_argcount,self.kwonly,len(co_varnames),co_stacksize,co_flags,bytes(co_code),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,bytes(co_lnotab),co_freevars,tuple(co_cellvars))
