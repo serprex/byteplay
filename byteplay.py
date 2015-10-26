@@ -18,10 +18,14 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 __version__ = '0.3'
 __all__ = ['opmap','opname','opcodes','hasflow','stack_effect','cmp_op','hasarg','hasname','hasjrel','hasjabs','hasjump','haslocal','hascompare','hasfree','hascode','Opcode','SetLineno','Label','isopcode','Code']
+
+
 import opcode
 from sys import version_info
 from dis import findlabels
 from types import CodeType
+
+
 class Opcode(int):__str__=__repr__=lambda s:opname[s]
 opmap = {name.replace('+','_'):Opcode(code) for name,code in opcode.opmap.items()}
 opname = {code:name for name,code in opmap.items()}
@@ -77,6 +81,8 @@ CO_GENERATOR_ALLOWED = 0x1000
 CO_FUTURE_DIVISION = 0x2000
 CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
 CO_FUTURE_WITH_STATEMENT = 0x8000
+
+
 class Code(object):
     """An object which holds all the information which a Python code object
     holds, but in an easy-to-play-with representation
@@ -98,7 +104,7 @@ class Code(object):
     filename - string: the file name of the code (co_filename)
     firstlineno - int: the first line number (co_firstlineno)
     docstring - string or None: the docstring (the first item of co_consts,
-                if it's str or unicode)
+                if it's str)
 
     code is a list of 2-tuples. The first item is an opcode, or SetLineno, or a
     Label instance. The second item is the argument, if applicable, or None"""
@@ -114,6 +120,7 @@ class Code(object):
         self.filename = filename
         self.firstlineno = firstlineno
         self.docstring = docstring
+
     @staticmethod
     def _findlinestarts(code):
         """Find the offsets in a byte code which are start of lines in the source
@@ -127,6 +134,7 @@ class Code(object):
                 addr += byte_incr
             lineno += line_incr
         yield addr,lineno
+
     @classmethod
     def from_code(cls, co):
         """Disassemble a Python code object into a Code object"""
@@ -143,9 +151,9 @@ class Code(object):
             if i in linestarts:code.append((SetLineno, linestarts[i]))
             i += 1
             if op in hascode:
-                lastop,lastarg=code[-1]
+                lastop,lastarg=code[-2]
                 if lastop!=LOAD_CONST:raise ValueError("%s should be preceded by LOAD_CONST"%op)
-                code[-1]=(LOAD_CONST,Code.from_code(lastarg))
+                code[-2]=(LOAD_CONST,Code.from_code(lastarg))
             if op not in hasarg:code.append((op, None))
             else:
                 arg=co_code[i]|co_code[i+1]<<8|extended_arg
@@ -166,6 +174,7 @@ class Code(object):
                 filename = co.co_filename,
                 firstlineno = co.co_firstlineno,
                 docstring = co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0],str) else None)
+
     def __eq__(self, other):
         try:
             if(self.freevars != other.freevars or
@@ -189,7 +198,8 @@ class Code(object):
                         if lmap.setdefault(arg1,arg2) is not arg2:return False
                     elif arg1!=arg2:return False
             return True
-        except:return False
+        except: return False
+
     def _compute_stacksize(self):
         code = self.code
         label_pos = {op[0]:pos for pos,op in enumerate(code) if isinstance(op[0],Label)}
@@ -205,7 +215,7 @@ class Code(object):
         # stack recording consistent, the get_next_stacks function will always
         # yield the stack state of the target as if 1 object was pushed, but
         # this will be corrected in the actual stack recording
-        sf_targets={label_pos[arg] for op,arg in code if op==SETUP_FINALLY}
+        sf_targets={label_pos[arg] for op,arg in code if (op==SETUP_FINALLY or op == SETUP_WITH)}
         stacks=[None]*len(code)
         maxsize=0
         op=[(0,(0,))]
@@ -218,32 +228,58 @@ class Code(object):
             if o>maxsize:maxsize=o
             o,arg=code[pos]
             if isinstance(o,Label):
-                if pos in sf_targets:curstack=curstack[:-1]+(curstack[-1]+2,)
+                if pos in sf_targets:
+                    curstack = newstack(2)
                 if stacks[pos] is None:
                     stacks[pos]=curstack
-                    if o not in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):
-                        pos+=1
-                        if not isopcode(o):op+=(pos,curstack),
-                        elif o not in hasflow:op+=(pos,newstack(stack_effect(o,arg))),
-                        elif o == FOR_ITER:op+=(label_pos[arg],newstack(-1)),(pos,newstack(1))
-                        elif o in (JUMP_FORWARD,JUMP_ABSOLUTE):op+=(label_pos[arg],curstack),
-                        elif o in (POP_JUMP_IF_FALSE,POP_JUMP_IF_TRUE):
-                            curstack=newstack(-1)
-                            op+=(label_pos[arg],curstack),(pos,curstack)
-                        elif o in (JUMP_IF_FALSE_OR_POP,JUMP_IF_TRUE_OR_POP):op+=(label_pos[arg],curstack),(pos,newstack(-1))
-                        elif o == CONTINUE_LOOP:op+=(label_pos[arg],curstack[:-1]),
-                        elif o == SETUP_LOOP:op+=(pos,curstack+(0,)),(label_pos[arg],curstack)
-                        elif o == SETUP_EXCEPT:op+=(pos,curstack+(0,)),(label_pos[arg],newstack(3))
-                        elif o == SETUP_FINALLY:op+=(pos,curstack+(0,)),(label_pos[arg],newstack(1))
-                        elif o == POP_BLOCK:op+=(pos,curstack[:-1]),
-                        elif o == END_FINALLY:op+=(pos,newstack(-3)),
-                        elif o == WITH_CLEANUP:op+=(pos,newstack(-1)),
-                        else:raise ValueError("Unhandled opcode %s"%op)
                 elif stacks[pos]!=curstack:
                     op=pos+1
-                    while code[op][0] not in hasflow:op+=1
-                    if code[op][0] not in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):raise ValueError("Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4]))
+                    while code[op][0] not in hasflow:
+                        op+=1
+                    if code[op][0] not in (RETURN_VALUE,RAISE_VARARGS,STOP_CODE):
+                        raise ValueError("Inconsistent code at %s %s %s\n%s"%(pos,curstack,stacks[pos],code[pos-5:pos+4]))
+                    pos=None
+                else:
+                    pos=None
+            if pos is not None and o not in (BREAK_LOOP,RETURN_VALUE,RAISE_VARARGS,STOP_CODE):
+                pos+=1
+                if not isopcode(o): op+=(pos,curstack),
+                elif o not in hasflow:
+                    if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR,
+                             STORE_GLOBAL, STORE_NAME, STORE_FAST, STORE_ATTR,
+                             DELETE_GLOBAL, IMPORT_NAME, IMPORT_FROM, COMPARE_OP):
+                        se = stack_effect(o, 0) # ?
+                    else:
+                        se = stack_effect(o, arg)
+                    op += (pos, newstack(se)),
+                elif o == FOR_ITER:
+                    op+=(label_pos[arg],newstack(-1)),(pos,newstack(1))
+                elif o in (JUMP_FORWARD,JUMP_ABSOLUTE):
+                    op+=(label_pos[arg],curstack),
+                elif o in (JUMP_IF_FALSE_OR_POP,JUMP_IF_TRUE_OR_POP):
+                    op += (label_pos[arg],curstack),(pos,newstack(-1))
+                elif o in {POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE}:
+                    op += (label_pos[arg],newstack(-1)),(pos,newstack(-1))
+                elif o == CONTINUE_LOOP:
+                    op+=(label_pos[arg],curstack[:-1]),
+                elif o == SETUP_LOOP:
+                    op+=(pos,curstack+(0,)),(label_pos[arg],curstack)
+                elif o == SETUP_EXCEPT:
+                    op+=(pos,curstack+(0,)),(label_pos[arg],newstack(3))
+                elif o == SETUP_FINALLY:
+                    op+=(pos,curstack+(0,)),(label_pos[arg],newstack(1))
+                elif o == POP_BLOCK:
+                    op+=(pos,curstack[:-1]),
+                elif o == END_FINALLY:
+                    op+=(pos,newstack(-3)),
+                elif o == SETUP_WITH:
+                    op += (pos,curstack+(1,)),(label_pos[arg],newstack(1)) # ?
+                elif o == WITH_CLEANUP:
+                    op+=(pos,newstack(-1)),
+                else:
+                    raise ValueError("Unhandled opcode %s"%op)
         return maxsize
+
     def to_code(self):
         """Assemble a Python code object from a Code object"""
         co_argcount = len(self.args) - self.varargs - self.varkwargs
@@ -296,9 +332,12 @@ class Code(object):
             elif op not in hasarg:co_code += bytes((op,))
             else:
                 if op in hasconst:
-                    if isinstance(arg,Code) and i+1<len(self.code) and self.code[i+1][0] in hascode:arg=arg.to_code()
+                    if isinstance(arg,Code) and i+2<len(self.code) and self.code[i+2][0] in hascode:
+                        arg=arg.to_code()
+                        assert arg is not None
                     arg=index(co_consts,arg,0)
-                elif op in hasname:arg=index(co_names, arg)
+                elif op in hasname:
+                    arg=index(co_names, arg)
                 elif op in hasjump:
                     jumps.append((len(co_code),arg))
                     co_code += bytes((op, 0, 0))
@@ -316,4 +355,8 @@ class Code(object):
             if jump>0xFFFF:raise NotImplementedError("Extended jumps not implemented")
             co_code[pos+1]=jump&0xFF
             co_code[pos+2]=jump>>8&0xFF
-        return CodeType(co_argcount,self.kwonly,len(co_varnames),co_stacksize,co_flags,bytes(co_code),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,bytes(co_lnotab),co_freevars,tuple(co_cellvars))
+
+        return CodeType(co_argcount,self.kwonly,len(co_varnames),co_stacksize,co_flags,
+                        bytes(co_code),tuple(co_consts),tuple(co_names),tuple(co_varnames),
+                        self.filename,self.name,self.firstlineno,bytes(co_lnotab),co_freevars,
+                        tuple(co_cellvars))
