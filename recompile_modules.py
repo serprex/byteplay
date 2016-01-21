@@ -79,7 +79,7 @@ def printcodelist(codelist, to=sys.stdout):
             argstr), file=to)
 
 
-def recompile(filename):
+def recompile(filename, insert_reassembly_stamp=True):
     """Create a .pyc by disassembling the file and assembling it again, printing
     a message that the reassembled file was loaded."""
     # Most of the code here based on the compile.py module.
@@ -108,19 +108,20 @@ def recompile(filename):
     if cod is None:
         print("Can't recompile", filename)
         return
-    '''
-    message = "reassembled %r imported.\n" % filename
-    cod.code[:0] = [  # __import__('sys').stderr.write(message)
-        (LOAD_GLOBAL, '__import__'),
-        (LOAD_CONST, 'sys'),
-        (CALL_FUNCTION, 1),
-        (LOAD_ATTR, 'stderr'),
-        (LOAD_ATTR, 'write'),
-        (LOAD_CONST, message),
-        (CALL_FUNCTION, 1),
-        (POP_TOP, None),
-    ]
-    '''
+
+    if insert_reassembly_stamp:
+        message = "reassembled %r imported.\n" % filename
+        cod.code[:0] = [  # __import__('sys').stderr.write(message)
+            (LOAD_GLOBAL, '__import__'),
+            (LOAD_CONST, 'sys'),
+            (CALL_FUNCTION, 1),
+            (LOAD_ATTR, 'stderr'),
+            (LOAD_ATTR, 'write'),
+            (LOAD_CONST, message),
+            (CALL_FUNCTION, 1),
+            (POP_TOP, None),
+        ]
+
     codeobject2 = cod.to_code()
     optimize = -1
     if optimize >= 0:
@@ -128,10 +129,12 @@ def recompile(filename):
                                                  debug_override=not optimize)
     else:
         cfile = importlib.util.cache_from_source(filename)
+
     mode = importlib._bootstrap._calc_mode(filename)
     cdir = os.path.dirname(cfile)
     os.makedirs(cdir, exist_ok=True)
     fd = os.open(cfile, os.O_CREAT | os.O_WRONLY, mode & 0o666)
+
     with io.FileIO(fd, 'wb') as fc:
         fc.write(b'\0\0\0\0')
         fc.write(struct.pack('<l', timestamp))
@@ -145,7 +148,7 @@ def recompile(filename):
         fc.write(struct.pack('<l', fsize))
 
 
-def recompile_all(path):
+def recompile_all(path, insert_reassembly_stamp=True):
     """recursively recompile all .py files in the directory"""
     import os
     if os.path.isdir(path):
@@ -154,10 +157,10 @@ def recompile_all(path):
                 if name.endswith('.py'):
                     filename = os.path.abspath(os.path.join(root, name))
                     print(filename, file=sys.stderr)
-                    recompile(filename)
+                    recompile(filename, insert_reassembly_stamp=insert_reassembly_stamp)
     else:
         filename = os.path.abspath(path)
-        recompile(filename)
+        recompile(filename, insert_reassembly_stamp=insert_reassembly_stamp)
 
 
 def main():
@@ -180,6 +183,7 @@ them...
 """ % sys.argv[0])
         sys.exit(1)
     recompile_all(sys.argv[1])
+
 
 if __name__ == '__main__':
     main()
