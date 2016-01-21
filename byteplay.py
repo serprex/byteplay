@@ -445,13 +445,16 @@ class Code(object):
         """Assemble a Python code object from a Code object"""
         co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
         co_stacksize = self._compute_stacksize()
+
         co_flags = {op[0] for op in self.code}
+        is_generator = YIELD_VALUE in co_flags or YIELD_FROM in co_flags
+
         co_flags =\
             (not(STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) |\
             (self.newlocals and CO_NEWLOCALS) |\
             (self.varargs and CO_VARARGS) |\
             (self.varkwargs and CO_VARKEYWORDS) |\
-            ((YIELD_VALUE in co_flags) << 5) |\
+            (is_generator and CO_GENERATOR) |\
             ((not co_flags & hasfree) << 6)
 
         co_consts = [self.docstring]
