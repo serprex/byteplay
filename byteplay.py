@@ -217,6 +217,7 @@ class Code(object):
     freevars - list of strings: the free vars of the code (those are names
                of variables created in outer functions and used in the function)
     args - list of strings: the arguments of the code
+    kwonly - number of keyword only arguments
     varargs - boolean: Does args end with a '*args' argument
     varkwargs - boolean: Does args end with a '**kwargs' argument
     newlocals - boolean: Should a new local namespace be created
@@ -321,6 +322,7 @@ class Code(object):
         try:
             if (self.freevars != other.freevars or
                     self.args != other.args or
+                    self.kwonly != other.kwonly or
                     self.varargs != other.varargs or
                     self.varkwargs != other.varkwargs or
                     self.newlocals != other.newlocals or
