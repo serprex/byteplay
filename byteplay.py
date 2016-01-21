@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
 __version__ = '0.3'
 __all__ = [
     'opmap',
@@ -48,6 +49,8 @@ from types import CodeType
 
 class Opcode(int):
     __str__ = __repr__ = lambda s: opname[s]
+
+
 opmap = {name.replace('+', '_'): Opcode(code) for name, code in opcode.opmap.items()}
 opname = {code: name for name, code in opmap.items()}
 opcodes = set(opname)
@@ -55,6 +58,7 @@ for cmp_op, hasarg in opmap.items():
     globals()[cmp_op] = hasarg
     __all__.append(cmp_op)
 cmp_op = opcode.cmp_op
+
 hasarg = {x for x in opcodes if x >= opcode.HAVE_ARGUMENT}
 hasconst = {Opcode(x) for x in opcode.hasconst}
 hasname = {Opcode(x) for x in opcode.hasname}
@@ -65,6 +69,7 @@ haslocal = {Opcode(x) for x in opcode.haslocal}
 hascompare = {Opcode(x) for x in opcode.hascompare}
 hasfree = {Opcode(x) for x in opcode.hasfree}
 hascode = {MAKE_FUNCTION, MAKE_CLOSURE}
+
 if version_info.minor > 2:
     STOP_CODE = -1
 if version_info.minor < 4:
@@ -166,6 +171,7 @@ if version_info.minor < 4:
         raise ValueError("Unknown %s %s" % (op, arg))
 else:
     from dis import stack_effect
+
 hasflow = hasjump | {
     WITH_CLEANUP,
     POP_BLOCK,
@@ -178,10 +184,15 @@ hasflow = hasjump | {
 
 class Label:
     pass
+
+
 SetLineno = type("SetLinenoType", (object,), {"__repr__": lambda s: 'SetLineno'})
 
 
-def isopcode(x): return x is not SetLineno and not isinstance(x, Label)
+def isopcode(x):
+    return x is not SetLineno and not isinstance(x, Label)
+
+
 CO_OPTIMIZED = 1
 CO_NEWLOCALS = 2
 CO_VARARGS = 4
@@ -221,19 +232,8 @@ class Code(object):
     code is a list of 2-tuples. The first item is an opcode, or SetLineno, or a
     Label instance. The second item is the argument, if applicable, or None"""
 
-    def __init__(
-            self,
-            code,
-            freevars,
-            args,
-            kwonly,
-            varargs,
-            varkwargs,
-            newlocals,
-            name,
-            filename,
-            firstlineno,
-            docstring):
+    def __init__(self, code, freevars, args, kwonly, varargs, varkwargs, newlocals,
+                 name, filename, firstlineno, docstring):
         self.code = code
         self.freevars = freevars
         self.args = args
@@ -250,7 +250,8 @@ class Code(object):
     def _findlinestarts(code):
         """Find the offsets in a byte code which are start of lines in the source
         Generate pairs offset,lineno as described in Python/compile.c
-        This is a modified version of dis.findlinestarts, which allows multiplelinestarts with the same line number"""
+        This is a modified version of dis.findlinestarts, which allows multiplelinestarts
+        with the same line number"""
         lineno = code.co_firstlineno
         addr = 0
         for byte_incr, line_incr in zip(code.co_lnotab[0::2], code.co_lnotab[1::2]):
@@ -291,39 +292,45 @@ class Code(object):
                 if op == opcode.EXTENDED_ARG:
                     extended_arg = arg << 16
                 else:
-                    code.append((op, co.co_consts[arg] if op in hasconst else co.co_names[arg] if op in hasname else labels[arg] if op in hasjabs else labels[
-                                i + arg] if op in hasjrel else co.co_varnames[arg] if op in haslocal else cmp_op[arg] if op in hascompare else cellfree[arg] if op in hasfree else arg))
+                    byteplay_arg = co.co_consts[arg] if op in hasconst else \
+                                   co.co_names[arg] if op in hasname else \
+                                   labels[arg] if op in hasjabs else \
+                                   labels[i + arg] if op in hasjrel else \
+                                   co.co_varnames[arg] if op in haslocal else \
+                                   cmp_op[arg] if op in hascompare else \
+                                   cellfree[arg] if op in hasfree else \
+                                   arg
+                    code.append((op, byteplay_arg))
+
         varargs = not not co.co_flags & CO_VARARGS
         varkwargs = not not co.co_flags & CO_VARKEYWORDS
-        return cls(
-            code=code,
-            freevars=co.co_freevars,
-            args=co.co_varnames[
-                :co.co_argcount + varargs + varkwargs],
-            kwonly=co.co_kwonlyargcount,
-            varargs=varargs,
-            varkwargs=varkwargs,
-            newlocals=not not co.co_flags & CO_NEWLOCALS,
-            name=co.co_name,
-            filename=co.co_filename,
-            firstlineno=co.co_firstlineno,
-            docstring=co.co_consts[0] if co.co_consts and isinstance(
-                co.co_consts[0],
-                str) else None)
+
+        return cls(code=code,
+                   freevars=co.co_freevars,
+                   args=co.co_varnames[:co.co_argcount + varargs + varkwargs],
+                   kwonly=co.co_kwonlyargcount,
+                   varargs=varargs,
+                   varkwargs=varkwargs,
+                   newlocals=not not co.co_flags & CO_NEWLOCALS,
+                   name=co.co_name,
+                   filename=co.co_filename,
+                   firstlineno=co.co_firstlineno,
+                   docstring=co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0], str) else None)
 
     def __eq__(self, other):
         try:
-            if(self.freevars != other.freevars or
-               self.args != other.args or
-               self.varargs != other.varargs or
-               self.varkwargs != other.varkwargs or
-               self.newlocals != other.newlocals or
-               self.name != other.name or
-               self.filename != other.filename or
-               self.firstlineno != other.firstlineno or
-               self.docstring != other.docstring or
-               len(self.code) != len(other.code)):
+            if (self.freevars != other.freevars or
+                    self.args != other.args or
+                    self.varargs != other.varargs or
+                    self.varkwargs != other.varkwargs or
+                    self.newlocals != other.newlocals or
+                    self.name != other.name or
+                    self.filename != other.filename or
+                    self.firstlineno != other.firstlineno or
+                    self.docstring != other.docstring or
+                    len(self.code) != len(other.code)):
                 return False
+
             # This isn't trivial due to labels
             lmap = {}
             for (op1, arg1), (op2, arg2) in zip(self.code, other.code):
@@ -338,6 +345,7 @@ class Code(object):
                             return False
                     elif arg1 != arg2:
                         return False
+
             return True
         except:
             return False
@@ -368,6 +376,7 @@ class Code(object):
                 raise ValueError("Popped a non-existing element at %s %s" %
                                  (pos, code[pos - 3:pos + 2]))
             return curstack[:-1] + (curstack[-1] + n,)
+
         while op:
             pos, curstack = op.pop()
             o = sum(curstack)
@@ -429,6 +438,7 @@ class Code(object):
                     op += (pos, newstack(-1)),
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
+
         return maxsize
 
     def to_code(self):
@@ -436,18 +446,19 @@ class Code(object):
         co_argcount = len(self.args) - self.varargs - self.varkwargs
         co_stacksize = self._compute_stacksize()
         co_flags = {op[0] for op in self.code}
-        co_flags = (
-            not(
-                STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) | (
-            self.newlocals and CO_NEWLOCALS) | (
-                self.varargs and CO_VARARGS) | (
-                    self.varkwargs and CO_VARKEYWORDS) | (
-                        (YIELD_VALUE in co_flags) << 5) | (
-                            (not co_flags & hasfree) << 6)
+        co_flags =\
+            (not(STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) |\
+            (self.newlocals and CO_NEWLOCALS) |\
+            (self.varargs and CO_VARARGS) |\
+            (self.varkwargs and CO_VARKEYWORDS) |\
+            ((YIELD_VALUE in co_flags) << 5) |\
+            ((not co_flags & hasfree) << 6)
+
         co_consts = [self.docstring]
         co_names = []
         co_varnames = list(self.args)
         co_freevars = tuple(self.freevars)
+
         # Find all cellvars beforehand for two reasons
         # Need the number of them to construct the numeric arg for ops in hasfree
         # Need to put args which are cells in the beginning of co_cellvars
@@ -465,12 +476,14 @@ class Code(object):
                 return len(seq) - 1
             else:
                 raise IndexError("Item not found")
+
         jumps = []
         label_pos = {}
         lastlineno = self.firstlineno
         lastlinepos = 0
         co_code = bytearray()
         co_lnotab = bytearray()
+
         for i, (op, arg) in enumerate(self.code):
             if isinstance(op, Label):
                 label_pos[op] = len(co_code)
@@ -497,8 +510,8 @@ class Code(object):
                 co_code += bytes((op,))
             else:
                 if op in hasconst:
-                    if isinstance(arg, Code) and i + \
-                            2 < len(self.code) and self.code[i + 2][0] in hascode:
+                    if isinstance(arg, Code) and\
+                            i + 2 < len(self.code) and self.code[i + 2][0] in hascode:
                         arg = arg.to_code()
                         assert arg is not None
                     arg = index(co_consts, arg, 0)
@@ -520,6 +533,7 @@ class Code(object):
                 if arg > 0xFFFF:
                     co_code += bytes((opcode.EXTENDED_ARG, arg >> 16 & 0xFF, arg >> 24 & 0xFF))
                 co_code += bytes((op, arg & 0xFF, arg >> 8 & 0xFF))
+
         for pos, label in jumps:
             jump = label_pos[label]
             if co_code[pos] in hasjrel:
