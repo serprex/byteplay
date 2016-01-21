@@ -34,6 +34,7 @@ __all__ = [
     'hascompare',
     'hasfree',
     'hascode',
+    'hasconst',
     'Opcode',
     'SetLineno',
     'Label',

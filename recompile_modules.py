@@ -40,7 +40,7 @@ def printcodelist(codelist, to=sys.stdout):
     for i, (op, arg) in enumerate(codelist):
         if op is SetLineno:
             lineno = arg
-            print >> to
+            print(file=to)
             continue
 
         if isinstance(op, Label):
@@ -71,12 +71,12 @@ def printcodelist(codelist, to=sys.stdout):
         else:
             argstr = ''
 
-        print >> to, '%3s     %2s %4d %-20s %s' % (
+        print('%3s     %2s %4d %-20s %s' % (
             linenostr,
             islabelstr,
             i,
             op,
-            argstr)
+            argstr), file=to)
 
 
 def recompile(filename):
@@ -84,15 +84,17 @@ def recompile(filename):
     a message that the reassembled file was loaded."""
     # Most of the code here based on the compile.py module.
     import os
+    import io
     import imp
     import marshal
     import struct
+    import importlib
 
-    f = open(filename, 'U')
+    f = open(filename, 'U', encoding='utf-8')
     try:
-        timestamp = long(os.fstat(f.fileno()).st_mtime)
+        timestamp = int(os.fstat(f.fileno()).st_mtime)
     except AttributeError:
-        timestamp = long(os.stat(filename).st_mtime)
+        timestamp = int(os.stat(filename).st_mtime)
     codestring = f.read()
     f.close()
     if codestring and codestring[-1] != '\n':
@@ -103,8 +105,12 @@ def recompile(filename):
         print >> sys.stderr, "Skipping %s - syntax error." % filename
         return
     cod = Code.from_code(codeobject)
+    if cod is None:
+        print("Can't recompile", filename)
+        return
+    '''
     message = "reassembled %r imported.\n" % filename
-    cod.code[:0] = [ # __import__('sys').stderr.write(message)
+    cod.code[:0] = [  # __import__('sys').stderr.write(message)
         (LOAD_GLOBAL, '__import__'),
         (LOAD_CONST, 'sys'),
         (CALL_FUNCTION, 1),
@@ -113,16 +119,31 @@ def recompile(filename):
         (LOAD_CONST, message),
         (CALL_FUNCTION, 1),
         (POP_TOP, None),
-        ]
+    ]
+    '''
     codeobject2 = cod.to_code()
-    fc = open(filename+'c', 'wb')
-    fc.write('\0\0\0\0')
-    fc.write(struct.pack('<l', timestamp))
-    marshal.dump(codeobject2, fc)
-    fc.flush()
-    fc.seek(0, 0)
-    fc.write(imp.get_magic())
-    fc.close()
+    optimize = -1
+    if optimize >= 0:
+        cfile = importlib.util.cache_from_source(filename,
+                                                 debug_override=not optimize)
+    else:
+        cfile = importlib.util.cache_from_source(filename)
+    mode = importlib._bootstrap._calc_mode(filename)
+    cdir = os.path.dirname(cfile)
+    os.makedirs(cdir, exist_ok=True)
+    fd = os.open(cfile, os.O_CREAT | os.O_WRONLY, mode & 0o666)
+    with io.FileIO(fd, 'wb') as fc:
+        fc.write(b'\0\0\0\0')
+        fc.write(struct.pack('<l', timestamp))
+        fc.write(b'\0\0\0\0')
+        marshal.dump(codeobject2, fc)
+        fc.flush()
+        fsize = os.path.getsize(filename)
+        fc.seek(0, 0)
+        fc.write(importlib.util.MAGIC_NUMBER)
+        fc.seek(8, 0)
+        fc.write(struct.pack('<l', fsize))
+
 
 def recompile_all(path):
     """recursively recompile all .py files in the directory"""
@@ -132,16 +153,17 @@ def recompile_all(path):
             for name in files:
                 if name.endswith('.py'):
                     filename = os.path.abspath(os.path.join(root, name))
-                    print >> sys.stderr, filename
+                    print(filename, file=sys.stderr)
                     recompile(filename)
     else:
         filename = os.path.abspath(path)
         recompile(filename)
 
+
 def main():
     import os
     if len(sys.argv) != 2 or not os.path.exists(sys.argv[1]):
-        print """\
+        print("""\
 Usage: %s dir
 
 Search recursively for *.py in the given directory, disassemble and assemble
@@ -155,7 +177,7 @@ Some FutureWarnings may be raised, but that's expected.
 
 Tip: before doing this, check to see which tests fail even without reassembling
 them...
-""" % sys.argv[0]
+""" % sys.argv[0])
         sys.exit(1)
     recompile_all(sys.argv[1])
 
