@@ -194,17 +194,16 @@ def isopcode(x):
     return x is not SetLineno and not isinstance(x, Label)
 
 
-CO_OPTIMIZED = 1
-CO_NEWLOCALS = 2
-CO_VARARGS = 4
-CO_VARKEYWORDS = 8
-CO_NESTED = 16
-CO_GENERATOR = 32
-CO_NOFREE = 64
-CO_GENERATOR_ALLOWED = 0x1000
-CO_FUTURE_DIVISION = 0x2000
-CO_FUTURE_ABSOLUTE_IMPORT = 0x4000
-CO_FUTURE_WITH_STATEMENT = 0x8000
+# Flags for codeobject.co_flags, taken from Include/code.h, other flags are no longer used
+CO_OPTIMIZED   = 0x0001
+CO_NEWLOCALS   = 0x0002
+CO_VARARGS     = 0x0004
+CO_VARKEYWORDS = 0x0008
+CO_NESTED      = 0x0010
+CO_GENERATOR   = 0x0020
+CO_NOFREE      = 0x0040
+
+CO_FUTURE_BARRY_AS_BDFL = 0x40000
 
 
 class Code(object):
