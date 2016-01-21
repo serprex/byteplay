@@ -307,7 +307,7 @@ class Code(object):
 
         return cls(code=code,
                    freevars=co.co_freevars,
-                   args=co.co_varnames[:co.co_argcount + varargs + varkwargs],
+                   args=co.co_varnames[:co.co_argcount + varargs + varkwargs + co.co_kwonlyargcount],
                    kwonly=co.co_kwonlyargcount,
                    varargs=varargs,
                    varkwargs=varkwargs,
@@ -443,7 +443,7 @@ class Code(object):
 
     def to_code(self):
         """Assemble a Python code object from a Code object"""
-        co_argcount = len(self.args) - self.varargs - self.varkwargs
+        co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
         co_stacksize = self._compute_stacksize()
         co_flags = {op[0] for op in self.code}
         co_flags =\
