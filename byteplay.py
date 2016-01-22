@@ -46,6 +46,7 @@ import opcode
 from sys import version_info
 from dis import findlabels
 from types import CodeType
+from enum import Enum
 
 
 class Opcode(int):
@@ -391,10 +392,18 @@ class Code(object):
         states = [None] * len(code)
         maxsize = 0
 
+        class BlockType(Enum):
+            DEFAULT = 0,
+            TRY_FINALLY = 1,
+            TRY_EXCEPT = 2,
+            LOOP_BODY = 3,
+            WITH_BLOCK = 4,
+
         class State:
-            def __init__(self, pos=0, stack=(0,)):
+            def __init__(self, pos=0, stack=(0,), block_stack=(BlockType.DEFAULT,)):
                 self._pos = pos
                 self._stack = stack
+                self._block_stack = block_stack
 
             @property
             def pos(self):
@@ -413,6 +422,10 @@ class Code(object):
                     raise ValueError("Popped a non-existing element at %s %s" %
                                      (self._pos, code[self._pos - 4: self._pos + 3]))
                 return self._stack[:-1] + (self._stack[-1] + n,)
+
+            @property
+            def block_stack(self):
+                return self._block_stack
 
         op = [State()]
 
@@ -445,7 +458,7 @@ class Code(object):
                 next_pos = cur_state.pos + 1
 
                 if not isopcode(o):
-                    op += State(next_pos, cur_state.stack),
+                    op += State(next_pos, cur_state.stack, cur_state.block_stack),
 
                 elif o not in hasflow:
                     if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR, LOAD_DEREF,
@@ -457,50 +470,50 @@ class Code(object):
                     else:
                         se = stack_effect(o, arg)
 
-                    op += State(next_pos, cur_state.newstack(se)),
+                    op += State(next_pos, cur_state.newstack(se), cur_state.block_stack),
 
                 elif o == FOR_ITER:
-                    op += State(label_pos[arg], cur_state.newstack(-1)),\
-                          State(next_pos, cur_state.newstack(1))
+                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack),\
+                          State(next_pos, cur_state.newstack(1), cur_state.block_stack)
 
                 elif o in (JUMP_FORWARD, JUMP_ABSOLUTE):
-                    op += State(label_pos[arg], cur_state.stack),
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),
 
                 elif o in (JUMP_IF_FALSE_OR_POP, JUMP_IF_TRUE_OR_POP):
-                    op += State(label_pos[arg], cur_state.stack),\
-                          State(next_pos, cur_state.newstack(-1))
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),\
+                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack)
 
                 elif o in {POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE}:
-                    op += State(label_pos[arg], cur_state.newstack(-1)),\
-                          State(next_pos, cur_state.newstack(-1))
+                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack),\
+                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack)
 
                 elif o == CONTINUE_LOOP:
-                    op += State(label_pos[arg], cur_state.stack[:-1]),
+                    op += State(label_pos[arg], cur_state.stack[:-1], cur_state.block_stack),
 
                 elif o == SETUP_LOOP:
-                    op += State(next_pos, cur_state.stack + (0,)),\
-                          State(label_pos[arg], cur_state.stack)
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.LOOP_BODY,))
 
                 elif o == SETUP_EXCEPT:
-                    op += State(next_pos, cur_state.stack + (0,)),\
-                          State(label_pos[arg], cur_state.newstack(3))
+                    op += State(label_pos[arg], cur_state.newstack(3), cur_state.block_stack),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_EXCEPT,))
 
                 elif o == SETUP_FINALLY:
-                    op += State(next_pos, cur_state.stack + (0,)),\
-                          State(label_pos[arg], cur_state.newstack(1))
+                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_FINALLY,))
 
                 elif o == POP_BLOCK:
-                    op += State(next_pos, cur_state.stack[:-1]),
+                    op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1]),
 
                 elif o == END_FINALLY:
-                    op += State(next_pos, cur_state.newstack(-3)),
+                    op += State(next_pos, cur_state.newstack(-3), cur_state.block_stack),
 
                 elif o == SETUP_WITH:
-                    op += State(next_pos, cur_state.stack + (1,)),\
-                          State(label_pos[arg], cur_state.newstack(1))
+                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack),\
+                          State(next_pos, cur_state.stack + (1,), cur_state.block_stack + (BlockType.WITH_BLOCK,))
 
                 elif o == WITH_CLEANUP:
-                    op += State(next_pos, cur_state.newstack(-1)),
+                    op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack),
 
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
