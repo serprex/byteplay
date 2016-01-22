@@ -386,45 +386,67 @@ class Code(object):
         # stack recording consistent, the get_next_stacks function will always
         # yield the stack state of the target as if 1 object was pushed, but
         # this will be corrected in the actual stack recording
-        sf_targets = {label_pos[arg]
-                      for op, arg in code if (op == SETUP_FINALLY or op == SETUP_WITH)}
-        stacks = [None] * len(code)
-        maxsize = 0
-        op = [(0, (0,))]
+        sf_targets = {label_pos[arg] for op, arg in code if (op == SETUP_FINALLY or op == SETUP_WITH)}
 
-        def newstack(n):
-            if curstack[-1] < -n:
-                raise ValueError("Popped a non-existing element at %s %s" %
-                                 (pos, code[pos - 3:pos + 2]))
-            return curstack[:-1] + (curstack[-1] + n,)
+        states = [None] * len(code)
+        maxsize = 0
+
+        class State:
+            def __init__(self, pos=0, stack=(0,)):
+                self._pos = pos
+                self._stack = stack
+
+            @property
+            def pos(self):
+                return self._pos
+
+            @property
+            def stack(self):
+                return self._stack
+
+            @stack.setter
+            def stack(self, val):
+                self._stack = val
+
+            def newstack(self, n):
+                if self._stack[-1] < -n:
+                    raise ValueError("Popped a non-existing element at %s %s" %
+                                     (self._pos, code[self._pos - 4: self._pos + 3]))
+                return self._stack[:-1] + (self._stack[-1] + n,)
+
+        op = [State()]
 
         while op:
-            pos, curstack = op.pop()
-            o = sum(curstack)
+            cur_state = op.pop()
+            o = sum(cur_state.stack)
             if o > maxsize:
                 maxsize = o
-            o, arg = code[pos]
+
+            o, arg = code[cur_state.pos]
+
             if isinstance(o, Label):
-                if pos in sf_targets:
-                    curstack = newstack(2)
-                if stacks[pos] is None:
-                    stacks[pos] = curstack
-                elif stacks[pos] != curstack:
-                    op = pos + 1
-                    while code[op][0] not in hasflow:
-                        op += 1
-                    if code[op][0] not in (RETURN_VALUE, RAISE_VARARGS, STOP_CODE):
-                        raise ValueError(
-                            "Inconsistent code at %s %s %s\n%s" %
-                            (pos, curstack, stacks[pos], code[
-                                pos - 5:pos + 4]))
-                    pos = None
+                if cur_state.pos in sf_targets:
+                    cur_state.stack = cur_state.newstack(2)
+                if states[cur_state.pos] is None:
+                    states[cur_state.pos] = cur_state
+                elif states[cur_state.pos].stack != cur_state.stack:
+                    check_pos = cur_state.pos + 1
+                    while code[check_pos][0] not in hasflow:
+                        check_pos += 1
+                    if code[check_pos][0] not in (RETURN_VALUE, RAISE_VARARGS, STOP_CODE):
+                        raise ValueError("Inconsistent code at %s %s %s\n%s" %
+                                         (cur_state.pos, cur_state.stack, states[cur_state.pos].stack,
+                                          code[cur_state.pos - 5: cur_state.pos + 4]))
+                    continue
                 else:
-                    pos = None
-            if pos is not None and o not in (BREAK_LOOP, RETURN_VALUE, RAISE_VARARGS, STOP_CODE):
-                pos += 1
+                    continue
+
+            if o not in (BREAK_LOOP, RETURN_VALUE, RAISE_VARARGS, STOP_CODE):
+                next_pos = cur_state.pos + 1
+
                 if not isopcode(o):
-                    op += (pos, curstack),
+                    op += State(next_pos, cur_state.stack),
+
                 elif o not in hasflow:
                     if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR, LOAD_DEREF,
                              LOAD_CLASSDEREF, LOAD_CLOSURE,
@@ -434,31 +456,52 @@ class Code(object):
                         se = stack_effect(o, 0)
                     else:
                         se = stack_effect(o, arg)
-                    op += (pos, newstack(se)),
+
+                    op += State(next_pos, cur_state.newstack(se)),
+
                 elif o == FOR_ITER:
-                    op += (label_pos[arg], newstack(-1)), (pos, newstack(1))
+                    op += State(label_pos[arg], cur_state.newstack(-1)),\
+                          State(next_pos, cur_state.newstack(1))
+
                 elif o in (JUMP_FORWARD, JUMP_ABSOLUTE):
-                    op += (label_pos[arg], curstack),
+                    op += State(label_pos[arg], cur_state.stack),
+
                 elif o in (JUMP_IF_FALSE_OR_POP, JUMP_IF_TRUE_OR_POP):
-                    op += (label_pos[arg], curstack), (pos, newstack(-1))
+                    op += State(label_pos[arg], cur_state.stack),\
+                          State(next_pos, cur_state.newstack(-1))
+
                 elif o in {POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE}:
-                    op += (label_pos[arg], newstack(-1)), (pos, newstack(-1))
+                    op += State(label_pos[arg], cur_state.newstack(-1)),\
+                          State(next_pos, cur_state.newstack(-1))
+
                 elif o == CONTINUE_LOOP:
-                    op += (label_pos[arg], curstack[:-1]),
+                    op += State(label_pos[arg], cur_state.stack[:-1]),
+
                 elif o == SETUP_LOOP:
-                    op += (pos, curstack + (0,)), (label_pos[arg], curstack)
+                    op += State(next_pos, cur_state.stack + (0,)),\
+                          State(label_pos[arg], cur_state.stack)
+
                 elif o == SETUP_EXCEPT:
-                    op += (pos, curstack + (0,)), (label_pos[arg], newstack(3))
+                    op += State(next_pos, cur_state.stack + (0,)),\
+                          State(label_pos[arg], cur_state.newstack(3))
+
                 elif o == SETUP_FINALLY:
-                    op += (pos, curstack + (0,)), (label_pos[arg], newstack(1))
+                    op += State(next_pos, cur_state.stack + (0,)),\
+                          State(label_pos[arg], cur_state.newstack(1))
+
                 elif o == POP_BLOCK:
-                    op += (pos, curstack[:-1]),
+                    op += State(next_pos, cur_state.stack[:-1]),
+
                 elif o == END_FINALLY:
-                    op += (pos, newstack(-3)),
+                    op += State(next_pos, cur_state.newstack(-3)),
+
                 elif o == SETUP_WITH:
-                    op += (pos, curstack + (1,)), (label_pos[arg], newstack(1))  # ?
+                    op += State(next_pos, cur_state.stack + (1,)),\
+                          State(label_pos[arg], cur_state.newstack(1))
+
                 elif o == WITH_CLEANUP:
-                    op += (pos, newstack(-1)),
+                    op += State(next_pos, cur_state.newstack(-1)),
+
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
 
