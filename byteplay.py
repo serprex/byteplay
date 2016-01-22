@@ -181,7 +181,8 @@ hasflow = hasjump | {
     BREAK_LOOP,
     RETURN_VALUE,
     RAISE_VARARGS,
-    STOP_CODE}
+    STOP_CODE,
+    POP_EXCEPT}
 
 
 class Label:
@@ -398,6 +399,7 @@ class Code(object):
             TRY_EXCEPT = 2,
             LOOP_BODY = 3,
             WITH_BLOCK = 4,
+            EXCEPTION = 5,
 
         class State:
 
@@ -544,9 +546,9 @@ class Code(object):
                           State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.LOOP_BODY,), inside_loop_log)
 
                 elif o == SETUP_EXCEPT:
-                    inside_except_log = cur_state.newlog("SETUP_EXCEPT (+6)")
-                    inside_try_log = cur_state.newlog("SETUP_EXCEPT try-block (+block)")
-                    op += State(label_pos[arg], cur_state.newstack(6), cur_state.block_stack, inside_except_log),\
+                    inside_except_log = cur_state.newlog("SETUP_EXCEPT, exception (+6, +block)")
+                    inside_try_log = cur_state.newlog("SETUP_EXCEPT, try-block (+block)")
+                    op += State(label_pos[arg], cur_state.stack + (6,), cur_state.block_stack + (BlockType.EXCEPTION,), inside_except_log),\
                           State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_EXCEPT,), inside_try_log)
 
                 elif o == SETUP_FINALLY:
@@ -559,9 +561,17 @@ class Code(object):
                     log = cur_state.newlog("POP_BLOCK (-block)")
                     op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
 
+                elif o == POP_EXCEPT:
+                    log = cur_state.newlog("POP_EXCEPT (-block)")
+                    op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
+
                 elif o == END_FINALLY:
-                    log = cur_state.newlog("END_FINALLY (-6)")
-                    op += State(next_pos, cur_state.newstack(-6), cur_state.block_stack, log),
+                    if cur_state.block_stack[-1] == BlockType.EXCEPTION:
+                        # Reraise exception
+                        pass
+                    else:
+                        log = cur_state.newlog("END_FINALLY (-6)")
+                        op += State(next_pos, cur_state.newstack(-6), cur_state.block_stack, log),
 
                 elif o == SETUP_WITH:
                     inside_with_block = cur_state.newlog("SETUP_WITH, with-block (+1, +block)")
