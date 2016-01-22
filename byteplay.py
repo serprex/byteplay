@@ -449,7 +449,20 @@ class Code(object):
         co_stacksize = self._compute_stacksize()
 
         co_flags = {op[0] for op in self.code}
+
         is_generator = YIELD_VALUE in co_flags or YIELD_FROM in co_flags
+
+        no_free = not co_flags & hasfree
+        if no_free:
+            prev_command = None
+            for op, arg in self.code:
+                if prev_command is not None and isopcode(op) and op == CALL_FUNCTION and arg == 0:
+                    prev_op, prev_arg = prev_command
+                    if isopcode(prev_op) and\
+                            (prev_op == LOAD_GLOBAL or prev_op == LOAD_NAME) and prev_arg == 'super':
+                        no_free = False  # TODO: check if one of outer scopes is class
+                        break
+                prev_command = op, arg
 
         co_flags =\
             (not(STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) |\
@@ -457,7 +470,7 @@ class Code(object):
             (self.varargs and CO_VARARGS) |\
             (self.varkwargs and CO_VARKEYWORDS) |\
             (is_generator and CO_GENERATOR) |\
-            ((not co_flags & hasfree) << 6)
+            (no_free and CO_NOFREE)
 
         co_consts = [self.docstring]
         co_names = []
