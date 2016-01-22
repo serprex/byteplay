@@ -515,8 +515,14 @@ class Code(object):
                           State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log)
 
                 elif o == CONTINUE_LOOP:
-                    log = cur_state.newlog("CONTINUE_LOOP (-block)")
-                    op += State(label_pos[arg], cur_state.stack[:-1], cur_state.block_stack[:-1], log),
+                    jump_to_pos = label_pos[arg]
+                    if states[jump_to_pos]._stack != cur_state.stack:
+                        # TODO:
+                        log = cur_state.newlog("CONTINUE_LOOP, incorrect_stack")
+                        op += State(jump_to_pos, states[jump_to_pos].stack, cur_state.block_stack, log),
+                    else:
+                        log = cur_state.newlog("CONTINUE_LOOP, correct_stack")
+                        op += State(jump_to_pos, cur_state.stack, cur_state.block_stack, log),
 
                 elif o == SETUP_LOOP:
                     inside_loop_log = cur_state.newlog("SETUP_LOOP (+block)")
