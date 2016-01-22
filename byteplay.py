@@ -451,10 +451,14 @@ class Code(object):
 
         return maxsize
 
-    def to_code(self):
+    def to_code(self, from_function=False):
         """Assemble a Python code object from a Code object"""
         co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
-        co_stacksize = self._compute_stacksize()
+
+        num_fastnames = sum(1 for op, arg in self.code if isopcode(op) and op in haslocal)
+
+        is_function = self.newlocals or num_fastnames > 0 or len(self.args) > 0
+        nested = is_function and from_function
 
         co_flags = {op[0] for op in self.code}
 
@@ -478,7 +482,8 @@ class Code(object):
             (self.varargs and CO_VARARGS) |\
             (self.varkwargs and CO_VARKEYWORDS) |\
             (is_generator and CO_GENERATOR) |\
-            (no_free and CO_NOFREE)
+            (no_free and CO_NOFREE) |\
+            (nested and CO_NESTED)
 
         co_consts = [self.docstring]
         co_names = []
@@ -538,7 +543,7 @@ class Code(object):
                 if op in hasconst:
                     if isinstance(arg, Code) and\
                             i + 2 < len(self.code) and self.code[i + 2][0] in hascode:
-                        arg = arg.to_code()
+                        arg = arg.to_code(from_function=is_function)
                         assert arg is not None
                     arg = index(co_consts, arg, 0)
                 elif op in hasname:
@@ -568,6 +573,8 @@ class Code(object):
                 raise NotImplementedError("Extended jumps not implemented")
             co_code[pos + 1] = jump & 0xFF
             co_code[pos + 2] = jump >> 8 & 0xFF
+
+        co_stacksize = self._compute_stacksize()
 
         return CodeType(co_argcount, self.kwonly, len(co_varnames), co_stacksize, co_flags,
                         bytes(co_code), tuple(co_consts), tuple(co_names), tuple(co_varnames),
