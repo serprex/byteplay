@@ -266,6 +266,11 @@ class Code(object):
     @classmethod
     def from_code(cls, co):
         """Disassemble a Python code object into a Code object"""
+        free_cell_isection = set(co.co_cellvars) & set(co.co_freevars)
+        if free_cell_isection:
+            print(co.co_name + ': has non-empty co.co_cellvars & co.co_freevars', free_cell_isection)
+            return None
+
         co_code = co.co_code
         labels = {addr: Label() for addr in findlabels(co_code)}
         linestarts = dict(cls._findlinestarts(co))
@@ -286,7 +291,13 @@ class Code(object):
                 lastop, lastarg = code[-2]
                 if lastop != LOAD_CONST:
                     raise ValueError("%s should be preceded by LOAD_CONST" % op)
-                code[-2] = (LOAD_CONST, Code.from_code(lastarg))
+
+                sub_code = Code.from_code(lastarg)
+                if sub_code is None:
+                    print(co.co_name + ': has unexpected subcode block')
+                    return None
+
+                code[-2] = (LOAD_CONST, sub_code)
             if op not in hasarg:
                 code.append((op, None))
             else:
@@ -453,10 +464,8 @@ class Code(object):
 
     def to_code(self, from_function=False):
         """Assemble a Python code object from a Code object"""
-        co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
 
         num_fastnames = sum(1 for op, arg in self.code if isopcode(op) and op in haslocal)
-
         is_function = self.newlocals or num_fastnames > 0 or len(self.args) > 0
         nested = is_function and from_function
 
@@ -574,6 +583,7 @@ class Code(object):
             co_code[pos + 1] = jump & 0xFF
             co_code[pos + 2] = jump >> 8 & 0xFF
 
+        co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
         co_stacksize = self._compute_stacksize()
 
         return CodeType(co_argcount, self.kwonly, len(co_varnames), co_stacksize, co_flags,
