@@ -234,7 +234,7 @@ class Code(object):
     Label instance. The second item is the argument, if applicable, or None"""
 
     def __init__(self, code, freevars, args, kwonly, varargs, varkwargs, newlocals,
-                 name, filename, firstlineno, docstring):
+                 name, filename, firstlineno, docstring, force_generator=False):
         self.code = code
         self.freevars = freevars
         self.args = args
@@ -246,6 +246,7 @@ class Code(object):
         self.filename = filename
         self.firstlineno = firstlineno
         self.docstring = docstring
+        self.force_generator = force_generator
 
     @staticmethod
     def _findlinestarts(code):
@@ -272,6 +273,8 @@ class Code(object):
         code = []
         n = len(co_code)
         i = extended_arg = 0
+        is_generator = False
+
         while i < n:
             op = Opcode(co_code[i])
             if i in labels:
@@ -303,8 +306,12 @@ class Code(object):
                                    arg
                     code.append((op, byteplay_arg))
 
+            if op == YIELD_VALUE or op == YIELD_FROM:
+                is_generator = True
+
         varargs = not not co.co_flags & CO_VARARGS
         varkwargs = not not co.co_flags & CO_VARKEYWORDS
+        force_generator = not is_generator and (co.co_flags & CO_GENERATOR)
 
         return cls(code=code,
                    freevars=co.co_freevars,
@@ -316,7 +323,8 @@ class Code(object):
                    name=co.co_name,
                    filename=co.co_filename,
                    firstlineno=co.co_firstlineno,
-                   docstring=co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0], str) else None)
+                   docstring=co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0], str) else None,
+                   force_generator=force_generator)
 
     def __eq__(self, other):
         try:
@@ -450,7 +458,7 @@ class Code(object):
 
         co_flags = {op[0] for op in self.code}
 
-        is_generator = YIELD_VALUE in co_flags or YIELD_FROM in co_flags
+        is_generator = self.force_generator or (YIELD_VALUE in co_flags or YIELD_FROM in co_flags)
 
         no_free = not co_flags & hasfree
         if no_free:
