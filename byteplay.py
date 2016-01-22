@@ -189,7 +189,10 @@ class Label:
     pass
 
 
-SetLineno = type("SetLinenoType", (object,), {"__repr__": lambda s: 'SetLineno'})
+class SetLinenoType:
+    def __repr__(self):
+        return 'SetLineno'
+SetLineno = SetLinenoType()
 
 
 def isopcode(x):
