@@ -400,10 +400,12 @@ class Code(object):
             WITH_BLOCK = 4,
 
         class State:
-            def __init__(self, pos=0, stack=(0,), block_stack=(BlockType.DEFAULT,)):
+
+            def __init__(self, pos=0, stack=(0,), block_stack=(BlockType.DEFAULT,), log=[]):
                 self._pos = pos
                 self._stack = stack
                 self._block_stack = block_stack
+                self._log = log
 
             @property
             def pos(self):
@@ -426,6 +428,24 @@ class Code(object):
             @property
             def block_stack(self):
                 return self._block_stack
+
+            @property
+            def log(self):
+                return self._log
+
+            def newlog(self, msg):
+                log_msg = str(self._pos) + ": " + msg
+                if self._stack:
+                    log_msg += " (on stack: "
+                    log_depth = 2
+                    log_depth = min(log_depth, len(self._stack))
+                    for pos in range(-1, -log_depth, -1):
+                        log_msg += str(self._stack[pos]) + ", "
+                    log_msg += str(self._stack[-log_depth])
+                    log_msg += ")"
+                else:
+                    log_msg += " (empty stack)"
+                return [log_msg] + self._log
 
         op = [State()]
 
@@ -458,7 +478,7 @@ class Code(object):
                 next_pos = cur_state.pos + 1
 
                 if not isopcode(o):
-                    op += State(next_pos, cur_state.stack, cur_state.block_stack),
+                    op += State(next_pos, cur_state.stack, cur_state.block_stack, cur_state.log),
 
                 elif o not in hasflow:
                     if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR, LOAD_DEREF,
@@ -470,50 +490,68 @@ class Code(object):
                     else:
                         se = stack_effect(o, arg)
 
-                    op += State(next_pos, cur_state.newstack(se), cur_state.block_stack),
+                    log = cur_state.newlog("non-flow command (" + str(o) + ", se = " + str(se) + ")")
+                    op += State(next_pos, cur_state.newstack(se), cur_state.block_stack, log),
 
                 elif o == FOR_ITER:
-                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack),\
-                          State(next_pos, cur_state.newstack(1), cur_state.block_stack)
+                    inside_for_log = cur_state.newlog("FOR_ITER (+1)")
+                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack, cur_state.log),\
+                          State(next_pos, cur_state.newstack(1), cur_state.block_stack, inside_for_log)
 
                 elif o in (JUMP_FORWARD, JUMP_ABSOLUTE):
-                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),
+                    after_jump_log = cur_state.newlog(str(o))
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack, after_jump_log),
 
                 elif o in (JUMP_IF_FALSE_OR_POP, JUMP_IF_TRUE_OR_POP):
-                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),\
-                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack)
+                    after_jump_log = cur_state.newlog(str(o) + ", jumped")
+                    log = cur_state.newlog(str(o) + ", not jumped (-1)")
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack, after_jump_log),\
+                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log)
 
                 elif o in {POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE}:
-                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack),\
-                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack)
+                    after_jump_log = cur_state.newlog(str(o) + ", jumped (-1)")
+                    log = cur_state.newlog(str(o) + ", not jumped (-1)")
+                    op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack, after_jump_log),\
+                          State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log)
 
                 elif o == CONTINUE_LOOP:
-                    op += State(label_pos[arg], cur_state.stack[:-1], cur_state.block_stack),
+                    log = cur_state.newlog("CONTINUE_LOOP (-block)")
+                    op += State(label_pos[arg], cur_state.stack[:-1], cur_state.block_stack[:-1], log),
 
                 elif o == SETUP_LOOP:
-                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack),\
-                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.LOOP_BODY,))
+                    inside_loop_log = cur_state.newlog("SETUP_LOOP (+block)")
+                    op += State(label_pos[arg], cur_state.stack, cur_state.block_stack, cur_state.log),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.LOOP_BODY,), inside_loop_log)
 
                 elif o == SETUP_EXCEPT:
-                    op += State(label_pos[arg], cur_state.newstack(3), cur_state.block_stack),\
-                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_EXCEPT,))
+                    inside_except_log = cur_state.newlog("SETUP_EXCEPT (+3)")
+                    inside_try_log = cur_state.newlog("SETUP_EXCEPT try-block (+block)")
+                    op += State(label_pos[arg], cur_state.newstack(3), cur_state.block_stack, inside_except_log),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_EXCEPT,), inside_try_log)
 
                 elif o == SETUP_FINALLY:
-                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack),\
-                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_FINALLY,))
+                    inside_finally_block = cur_state.newlog("SETUP_FINALLY (+1)")
+                    inside_try_log = cur_state.newlog("SETUP_FINALLY try-block (+block)")
+                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack, inside_finally_block),\
+                          State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_FINALLY,), inside_try_log)
 
                 elif o == POP_BLOCK:
-                    op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1]),
+                    log = cur_state.newlog("POP_BLOCK (-block)")
+                    op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
 
                 elif o == END_FINALLY:
-                    op += State(next_pos, cur_state.newstack(-3), cur_state.block_stack),
+                    log = cur_state.newlog("END_FINALLY (-3)")
+                    op += State(next_pos, cur_state.newstack(-3), cur_state.block_stack, log),
 
                 elif o == SETUP_WITH:
-                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack),\
-                          State(next_pos, cur_state.stack + (1,), cur_state.block_stack + (BlockType.WITH_BLOCK,))
+                    inside_with_block = cur_state.newlog("SETUP_WITH, with-block (+1, +block)")
+                    inside_finally_block = cur_state.newlog("SETUP_WITH, finally (+1)")
+                    op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack, inside_finally_block),\
+                          State(next_pos, cur_state.stack + (1,), cur_state.block_stack + (BlockType.WITH_BLOCK,), inside_with_block)
 
                 elif o == WITH_CLEANUP:
-                    op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack),
+                    log = cur_state.newlog("WITH_CLEANUP (-1)")
+                    op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log),
 
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
