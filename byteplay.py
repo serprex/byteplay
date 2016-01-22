@@ -595,7 +595,7 @@ class Code(object):
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
 
-        return maxsize
+        return maxsize + 6  # for exception raise in deepest place
 
     def to_code(self, from_function=False):
         """Assemble a Python code object from a Code object"""
