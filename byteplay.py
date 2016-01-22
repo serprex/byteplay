@@ -670,9 +670,7 @@ class Code(object):
                 incr_pos = len(co_code) - lastlinepos
                 lastlineno = arg
                 lastlinepos += incr_pos
-                if not (incr_lineno or incr_pos):
-                    co_lnotab += b"\0\0"
-                else:
+                if incr_lineno != 0 or incr_pos != 0:
                     while incr_pos > 255:
                         co_lnotab += b"\xFF\0"
                         incr_pos -= 255
