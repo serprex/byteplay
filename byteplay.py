@@ -459,7 +459,7 @@ class Code(object):
 
             if isinstance(o, Label):
                 if cur_state.pos in sf_targets:
-                    cur_state.stack = cur_state.newstack(2)
+                    cur_state.stack = cur_state.newstack(5)
                 if states[cur_state.pos] is None:
                     states[cur_state.pos] = cur_state
                 elif states[cur_state.pos].stack != cur_state.stack:
@@ -467,9 +467,23 @@ class Code(object):
                     while code[check_pos][0] not in hasflow:
                         check_pos += 1
                     if code[check_pos][0] not in (RETURN_VALUE, RAISE_VARARGS, STOP_CODE):
-                        raise ValueError("Inconsistent code at %s %s %s\n%s" %
-                                         (cur_state.pos, cur_state.stack, states[cur_state.pos].stack,
-                                          code[cur_state.pos - 5: cur_state.pos + 4]))
+                        if cur_state.pos not in sf_targets:
+                            raise ValueError("Inconsistent code at %s %s %s\n%s" %
+                                             (cur_state.pos, cur_state.stack, states[cur_state.pos].stack,
+                                              code[cur_state.pos - 5:cur_state.pos + 4]))
+                        else:
+                            # SETUP_FINALLY target inconsistent code!
+                            #
+                            # Since Python 3.2 assigned exception is cleared at the end of
+                            # the except clause (named exception handler).
+                            # To perform this CPython (checked in version 3.4.3) adds special
+                            # bytecode in exception handler which currently breaks 'regularity' of bytecode.
+                            # Exception handler is wrapped in try/finally block and POP_EXCEPT opcode
+                            # is inserted before END_FINALLY, as a result cleanup-finally block is executed outside
+                            # except handler. It's not a bug, as it doesn't cause any problems during execution, but
+                            # it breaks 'regularity' and we can't check inconsistency here. Maybe issue should be
+                            # posted to Python bug tracker.
+                            pass
                     continue
                 else:
                     continue
@@ -530,9 +544,9 @@ class Code(object):
                           State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.LOOP_BODY,), inside_loop_log)
 
                 elif o == SETUP_EXCEPT:
-                    inside_except_log = cur_state.newlog("SETUP_EXCEPT (+3)")
+                    inside_except_log = cur_state.newlog("SETUP_EXCEPT (+6)")
                     inside_try_log = cur_state.newlog("SETUP_EXCEPT try-block (+block)")
-                    op += State(label_pos[arg], cur_state.newstack(3), cur_state.block_stack, inside_except_log),\
+                    op += State(label_pos[arg], cur_state.newstack(6), cur_state.block_stack, inside_except_log),\
                           State(next_pos, cur_state.stack + (0,), cur_state.block_stack + (BlockType.TRY_EXCEPT,), inside_try_log)
 
                 elif o == SETUP_FINALLY:
@@ -546,8 +560,8 @@ class Code(object):
                     op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
 
                 elif o == END_FINALLY:
-                    log = cur_state.newlog("END_FINALLY (-3)")
-                    op += State(next_pos, cur_state.newstack(-3), cur_state.block_stack, log),
+                    log = cur_state.newlog("END_FINALLY (-6)")
+                    op += State(next_pos, cur_state.newstack(-6), cur_state.block_stack, log),
 
                 elif o == SETUP_WITH:
                     inside_with_block = cur_state.newlog("SETUP_WITH, with-block (+1, +block)")
