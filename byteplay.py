@@ -400,6 +400,7 @@ class Code(object):
             LOOP_BODY = 3,
             WITH_BLOCK = 4,
             EXCEPTION = 5,
+            SILENCED_EXCEPTION_BLOCK = 6,
 
         class State:
 
@@ -566,7 +567,10 @@ class Code(object):
                     op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
 
                 elif o == END_FINALLY:
-                    if cur_state.block_stack[-1] == BlockType.EXCEPTION:
+                    if cur_state.block_stack[-1] == BlockType.SILENCED_EXCEPTION_BLOCK:
+                        log = cur_state.newlog("END_FINALLY pop silenced exception block (-block)")
+                        op += State(next_pos, cur_state.stack[:-1], cur_state.block_stack[:-1], log),
+                    elif cur_state.block_stack[-1] == BlockType.EXCEPTION:
                         # Reraise exception
                         pass
                     else:
@@ -580,8 +584,13 @@ class Code(object):
                           State(next_pos, cur_state.stack + (1,), cur_state.block_stack + (BlockType.WITH_BLOCK,), inside_with_block)
 
                 elif o == WITH_CLEANUP:
+                    # There is special case when 'with' __exit__ function returns True,
+                    # that's the signal to silence exception, in this case additional element is pushed
+                    # and next END_FINALLY command won't reraise exception.
                     log = cur_state.newlog("WITH_CLEANUP (-1)")
-                    op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log),
+                    silenced_exception_log = cur_state.newlog("WITH_CLEANUP silenced_exception (+1, +block)")
+                    op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log),\
+                          State(next_pos, cur_state.newstack(-7) + (8,), cur_state.block_stack + (BlockType.SILENCED_EXCEPTION_BLOCK,), silenced_exception_log)
 
                 else:
                     raise ValueError("Unhandled opcode %s" % op)
