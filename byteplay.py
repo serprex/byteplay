@@ -426,10 +426,12 @@ class Code(object):
                 if not isopcode(o):
                     op += (pos, curstack),
                 elif o not in hasflow:
-                    if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR,
-                             STORE_GLOBAL, STORE_NAME, STORE_FAST, STORE_ATTR,
-                             DELETE_GLOBAL, IMPORT_NAME, IMPORT_FROM, COMPARE_OP):
-                        se = stack_effect(o, 0)  # ?
+                    if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR, LOAD_DEREF,
+                             LOAD_CLASSDEREF, LOAD_CLOSURE,
+                             STORE_GLOBAL, STORE_NAME, STORE_FAST, STORE_ATTR, STORE_DEREF,
+                             DELETE_GLOBAL, DELETE_NAME, DELETE_FAST, DELETE_ATTR, DELETE_DEREF,
+                             IMPORT_NAME, IMPORT_FROM, COMPARE_OP):
+                        se = stack_effect(o, 0)
                     else:
                         se = stack_effect(o, arg)
                     op += (pos, newstack(se)),
