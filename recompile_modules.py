@@ -95,8 +95,13 @@ def recompile(filename, insert_reassembly_stamp=True):
         timestamp = int(os.fstat(f.fileno()).st_mtime)
     except AttributeError:
         timestamp = int(os.stat(filename).st_mtime)
-    codestring = f.read()
+    try:
+        codestring = f.read()
+    except UnicodeDecodeError as exc:
+        print("Skipping %s - unsupported encoding." % filename, file=sys.stderr)
+        return
     f.close()
+
     if codestring and codestring[-1] != '\n':
         codestring = codestring + '\n'
     try:
