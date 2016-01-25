@@ -376,7 +376,7 @@ class Code(object):
         except:
             return False
 
-    def _compute_stacksize(self):
+    def _compute_stacksize(self, logging=False):
         code = self.code
         label_pos = {op[0]: pos for pos, op in enumerate(code) if isinstance(op[0], Label)}
         # sf_targets are the targets of SETUP_FINALLY opcodes. They are recorded
@@ -440,6 +440,9 @@ class Code(object):
                 return self._log
 
             def newlog(self, msg):
+                if not logging:
+                    return None
+
                 log_msg = str(self._pos) + ": " + msg
                 if self._stack:
                     log_msg += " (on stack: "
