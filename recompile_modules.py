@@ -101,9 +101,11 @@ def recompile(filename, insert_reassembly_stamp=True):
         codestring = codestring + '\n'
     try:
         codeobject = compile(codestring, filename, 'exec')
-    except SyntaxError:
-        print >> sys.stderr, "Skipping %s - syntax error." % filename
+    except SyntaxError as exc:
+        print("Skipping %s - syntax error ((%u:%u) %s)." %
+              (filename, exc.lineno, exc.offset if exc.offset is not None else -1, exc.msg), file=sys.stderr)
         return
+
     cod = Code.from_code(codeobject)
     if cod is None:
         print("Can't recompile", filename)
