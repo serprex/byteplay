@@ -42,8 +42,8 @@ __all__ = [
     'Code']
 
 
-import opcode
 from sys import version_info
+import opcode
 from dis import findlabels
 from types import CodeType
 from enum import Enum
@@ -228,6 +228,8 @@ class Code(object):
     newlocals - boolean: Should a new local namespace be created
                 (True in functions, False for module and exec code)
 
+    force_generator - set CO_GENERATOR in co_flags for generator Code objects without generator-specific code
+
     Not affecting action
     name - string: the name of the code (co_name)
     filename - string: the file name of the code (co_filename)
@@ -354,6 +356,7 @@ class Code(object):
                     self.filename != other.filename or
                     self.firstlineno != other.firstlineno or
                     self.docstring != other.docstring or
+                    self.force_generator != other.force_generator or
                     len(self.code) != len(other.code)):
                 return False
 
@@ -606,7 +609,7 @@ class Code(object):
                           State(next_pos, cur_state.newstack(-7) + (8,), cur_state.block_stack + (BlockType.SILENCED_EXCEPTION_BLOCK,), silenced_exception_log)
 
                 else:
-                    raise ValueError("Unhandled opcode %s" % op)
+                    raise ValueError("Unhandled opcode %s" % o)
 
         return maxsize + 6  # for exception raise in deepest place
 
