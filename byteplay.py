@@ -220,6 +220,7 @@ CO_COROUTINE          = 0x0080
 CO_ITERABLE_COROUTINE = 0x0100
 
 CO_FUTURE_BARRY_AS_BDFL = 0x40000
+CO_FUTURE_GENERATOR_STOP = 0x80000
 
 
 class Code(object):
@@ -242,6 +243,7 @@ class Code(object):
     force_generator - set CO_GENERATOR in co_flags for generator Code objects without generator-specific code
     force_coroutine - set CO_COROUTINE in co_flags for coroutine Code objects (native coroutines) without coroutine-specific code
     force_iterable_coroutine - set CO_ITERABLE_COROUTINE in co_flags for generator-based coroutine Code objects
+    future_generator_stop - set CO_FUTURE_GENERATOR_STOP flag (see PEP-479)
 
     Not affecting action
     name - string: the name of the code (co_name)
@@ -255,7 +257,8 @@ class Code(object):
 
     def __init__(self, code, freevars, args, kwonly, varargs, varkwargs, newlocals,
                  name, filename, firstlineno, docstring,
-                 force_generator=False, force_coroutine=False, force_iterable_coroutine=False):
+                 force_generator=False, force_coroutine=False, force_iterable_coroutine=False,
+                 future_generator_stop=False):
         self.code = code
         self.freevars = freevars
         self.args = args
@@ -270,6 +273,7 @@ class Code(object):
         self.force_generator = force_generator
         self.force_coroutine = force_coroutine
         self.force_iterable_coroutine = force_iterable_coroutine
+        self.future_generator_stop = future_generator_stop
 
     @staticmethod
     def _findlinestarts(code):
@@ -351,6 +355,7 @@ class Code(object):
         force_generator = not is_generator and (co.co_flags & CO_GENERATOR)
         force_coroutine = not is_coroutine and (co.co_flags & CO_COROUTINE)
         force_iterable_coroutine = co.co_flags & CO_ITERABLE_COROUTINE
+        future_generator_stop = co.co_flags & CO_FUTURE_GENERATOR_STOP
 
         assert not (force_coroutine and force_iterable_coroutine)
 
@@ -367,7 +372,8 @@ class Code(object):
                    docstring=co.co_consts[0] if co.co_consts and isinstance(co.co_consts[0], str) else None,
                    force_generator=force_generator,
                    force_coroutine=force_coroutine,
-                   force_iterable_coroutine=force_iterable_coroutine)
+                   force_iterable_coroutine=force_iterable_coroutine,
+                   future_generator_stop=future_generator_stop)
 
     def __eq__(self, other):
         try:
@@ -384,6 +390,7 @@ class Code(object):
                     self.force_generator != other.force_generator or
                     self.force_coroutine != other.force_coroutine or
                     self.force_iterable_coroutine != other.force_iterable_coroutine or
+                    self.future_generator_stop != other.future_generator_stop or
                     len(self.code) != len(other.code)):
                 return False
 
@@ -689,7 +696,8 @@ class Code(object):
             (no_free and CO_NOFREE) |\
             (nested and CO_NESTED) |\
             (is_native_coroutine and CO_COROUTINE) |\
-            (self.force_iterable_coroutine and CO_ITERABLE_COROUTINE)
+            (self.force_iterable_coroutine and CO_ITERABLE_COROUTINE) |\
+            (self.future_generator_stop and CO_FUTURE_GENERATOR_STOP)
 
         co_consts = [self.docstring]
         co_names = []
