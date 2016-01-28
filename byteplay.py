@@ -216,11 +216,14 @@ CO_NESTED      = 0x0010
 CO_GENERATOR   = 0x0020
 CO_NOFREE      = 0x0040
 
-CO_COROUTINE          = 0x0080
-CO_ITERABLE_COROUTINE = 0x0100
+if version_info[:2] >= (3, 5):
+    CO_COROUTINE          = 0x0080
+    CO_ITERABLE_COROUTINE = 0x0100
 
 CO_FUTURE_BARRY_AS_BDFL = 0x40000
-CO_FUTURE_GENERATOR_STOP = 0x80000
+
+if version_info[:2] >= (3, 5):
+    CO_FUTURE_GENERATOR_STOP = 0x80000
 
 
 class Code(object):
@@ -241,9 +244,10 @@ class Code(object):
                 (True in functions, False for module and exec code)
 
     force_generator - set CO_GENERATOR in co_flags for generator Code objects without generator-specific code
-    force_coroutine - set CO_COROUTINE in co_flags for coroutine Code objects (native coroutines) without coroutine-specific code
-    force_iterable_coroutine - set CO_ITERABLE_COROUTINE in co_flags for generator-based coroutine Code objects
-    future_generator_stop - set CO_FUTURE_GENERATOR_STOP flag (see PEP-479)
+    Python 3.5:
+        force_coroutine - set CO_COROUTINE in co_flags for coroutine Code objects (native coroutines) without coroutine-specific code
+        force_iterable_coroutine - set CO_ITERABLE_COROUTINE in co_flags for generator-based coroutine Code objects
+        future_generator_stop - set CO_FUTURE_GENERATOR_STOP flag (see PEP-479)
 
     Not affecting action
     name - string: the name of the code (co_name)
@@ -257,8 +261,8 @@ class Code(object):
 
     def __init__(self, code, freevars, args, kwonly, varargs, varkwargs, newlocals,
                  name, filename, firstlineno, docstring,
-                 force_generator=False, force_coroutine=False, force_iterable_coroutine=False,
-                 future_generator_stop=False):
+                 force_generator=False,
+                 *, force_coroutine=None, force_iterable_coroutine=None, future_generator_stop=None):
         self.code = code
         self.freevars = freevars
         self.args = args
@@ -271,9 +275,13 @@ class Code(object):
         self.firstlineno = firstlineno
         self.docstring = docstring
         self.force_generator = force_generator
-        self.force_coroutine = force_coroutine
-        self.force_iterable_coroutine = force_iterable_coroutine
-        self.future_generator_stop = future_generator_stop
+        if version_info < (3, 5):
+            # Flags unsupported in earlier versions
+            assert force_coroutine is None and force_iterable_coroutine is None and future_generator_stop is None
+        else:
+            self.force_coroutine = force_coroutine
+            self.force_iterable_coroutine = force_iterable_coroutine
+            self.future_generator_stop = future_generator_stop
 
     @staticmethod
     def _findlinestarts(code):
@@ -306,7 +314,8 @@ class Code(object):
         n = len(co_code)
         i = extended_arg = 0
         is_generator = False
-        is_coroutine = False
+        if version_info[:2] >= (3, 5):
+            is_coroutine = False
 
         while i < n:
             op = Opcode(co_code[i])
@@ -347,17 +356,23 @@ class Code(object):
 
             if op == YIELD_VALUE or op == YIELD_FROM:
                 is_generator = True
-            if op in coroutine_opcodes:
+
+            if version_info[:2] >= (3, 5) and op in coroutine_opcodes:
                 is_coroutine = True
 
         varargs = not not co.co_flags & CO_VARARGS
         varkwargs = not not co.co_flags & CO_VARKEYWORDS
         force_generator = not is_generator and (co.co_flags & CO_GENERATOR)
-        force_coroutine = not is_coroutine and (co.co_flags & CO_COROUTINE)
-        force_iterable_coroutine = co.co_flags & CO_ITERABLE_COROUTINE
-        future_generator_stop = co.co_flags & CO_FUTURE_GENERATOR_STOP
 
-        assert not (force_coroutine and force_iterable_coroutine)
+        if version_info[:2] >= (3, 5):
+            force_coroutine = not is_coroutine and (co.co_flags & CO_COROUTINE)
+            force_iterable_coroutine = co.co_flags & CO_ITERABLE_COROUTINE
+            assert not (force_coroutine and force_iterable_coroutine)
+            future_generator_stop = co.co_flags & CO_FUTURE_GENERATOR_STOP
+        else:
+            force_coroutine = None
+            force_iterable_coroutine =None
+            future_generator_stop = None
 
         return cls(code=code,
                    freevars=co.co_freevars,
@@ -388,11 +403,14 @@ class Code(object):
                     self.firstlineno != other.firstlineno or
                     self.docstring != other.docstring or
                     self.force_generator != other.force_generator or
-                    self.force_coroutine != other.force_coroutine or
-                    self.force_iterable_coroutine != other.force_iterable_coroutine or
-                    self.future_generator_stop != other.future_generator_stop or
                     len(self.code) != len(other.code)):
                 return False
+            elif version_info[:2] >= (3, 5):
+                if (self.force_coroutine != other.force_coroutine or
+                        self.force_iterable_coroutine != other.force_iterable_coroutine or
+                        self.future_generator_stop != other.future_generator_stop):
+                    return False
+
 
             # This isn't trivial due to labels
             lmap = {}
@@ -683,9 +701,10 @@ class Code(object):
 
         is_generator = self.force_generator or (YIELD_VALUE in co_flags or YIELD_FROM in co_flags)
         no_free = (not self.freevars) and (not co_flags & hasfree)
-        is_native_coroutine = bool(self.force_coroutine or (co_flags & coroutine_opcodes))
 
-        assert not (is_native_coroutine and self.force_iterable_coroutine)
+        if version_info[:2] >= (3, 5):
+            is_native_coroutine = bool(self.force_coroutine or (co_flags & coroutine_opcodes))
+            assert not (is_native_coroutine and self.force_iterable_coroutine)
 
         co_flags =\
             (not(STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) |\
@@ -694,10 +713,12 @@ class Code(object):
             (self.varkwargs and CO_VARKEYWORDS) |\
             (is_generator and CO_GENERATOR) |\
             (no_free and CO_NOFREE) |\
-            (nested and CO_NESTED) |\
-            (is_native_coroutine and CO_COROUTINE) |\
-            (self.force_iterable_coroutine and CO_ITERABLE_COROUTINE) |\
-            (self.future_generator_stop and CO_FUTURE_GENERATOR_STOP)
+            (nested and CO_NESTED)
+
+        if version_info[:2] >= (3, 5):
+            co_flags |= (is_native_coroutine and CO_COROUTINE) |\
+                        (self.force_iterable_coroutine and CO_ITERABLE_COROUTINE) |\
+                        (self.future_generator_stop and CO_FUTURE_GENERATOR_STOP)
 
         co_consts = [self.docstring]
         co_names = []
