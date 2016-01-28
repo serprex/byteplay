@@ -401,7 +401,12 @@ class Code(object):
         # stack recording consistent, the get_next_stacks function will always
         # yield the stack state of the target as if 1 object was pushed, but
         # this will be corrected in the actual stack recording
-        sf_targets = {label_pos[arg] for op, arg in code if (op == SETUP_FINALLY or op == SETUP_WITH)}
+        if version_info < (3, 5):
+            sf_targets = {label_pos[arg] for op, arg in code
+                          if (op == SETUP_FINALLY or op == SETUP_WITH)}
+        else:
+            sf_targets = {label_pos[arg] for op, arg in code
+                          if (op == SETUP_FINALLY or op == SETUP_WITH or op == SETUP_ASYNC_WITH)}
 
         states = [None] * len(code)
         maxsize = 0
@@ -600,7 +605,7 @@ class Code(object):
                         log = cur_state.newlog("END_FINALLY (-6)")
                         op += State(next_pos, cur_state.newstack(-6), cur_state.block_stack, log),
 
-                elif o == SETUP_WITH:
+                elif o == SETUP_WITH or (version_info[:2] >= (3, 5) and o == SETUP_ASYNC_WITH):
                     inside_with_block = cur_state.newlog("SETUP_WITH, with-block (+1, +block)")
                     inside_finally_block = cur_state.newlog("SETUP_WITH, finally (+1)")
                     op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack, inside_finally_block),\
