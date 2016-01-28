@@ -43,6 +43,9 @@ __all__ = [
 
 
 from sys import version_info
+if version_info < (3, 4):
+    raise NotImplementedError("Currently only Python versions 3.4 and 3.5 are supported!")
+
 import opcode
 from dis import findlabels
 from types import CodeType
