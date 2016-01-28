@@ -17,6 +17,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 import sys
+import os
 
 from byteplay import *
 
@@ -83,12 +84,10 @@ def recompile(filename, insert_reassembly_stamp=True):
     """Create a .pyc by disassembling the file and assembling it again, printing
     a message that the reassembled file was loaded."""
     # Most of the code here based on the compile.py module.
-    import os
     import io
-    import imp
     import marshal
     import struct
-    import importlib
+    import importlib.util
 
     f = open(filename, 'U', encoding='utf-8')
     try:
@@ -157,7 +156,6 @@ def recompile(filename, insert_reassembly_stamp=True):
 
 def recompile_all(path, insert_reassembly_stamp=True):
     """recursively recompile all .py files in the directory"""
-    import os
     if os.path.isdir(path):
         for root, dirs, files in os.walk(path):
             for name in files:
@@ -171,7 +169,6 @@ def recompile_all(path, insert_reassembly_stamp=True):
 
 
 def main():
-    import os
     if len(sys.argv) != 2 or not os.path.exists(sys.argv[1]):
         print("""\
 Usage: %s dir
