@@ -136,7 +136,11 @@ def recompile(filename, insert_reassembly_stamp=True):
     else:
         cfile = importlib.util.cache_from_source(filename)
 
-    mode = importlib._bootstrap._calc_mode(filename)
+    # Open file the way py_compile does
+    if sys.version_info < (3, 5):
+        mode = importlib._bootstrap._calc_mode(filename)
+    else:
+        mode = importlib._bootstrap_external._calc_mode(filename)
     cdir = os.path.dirname(cfile)
     os.makedirs(cdir, exist_ok=True)
     fd = os.open(cfile, os.O_CREAT | os.O_WRONLY, mode & 0o666)
