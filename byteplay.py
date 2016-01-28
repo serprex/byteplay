@@ -178,7 +178,6 @@ else:
     from dis import stack_effect
 
 hasflow = hasjump | {
-    WITH_CLEANUP,
     POP_BLOCK,
     END_FINALLY,
     BREAK_LOOP,
@@ -186,6 +185,11 @@ hasflow = hasjump | {
     RAISE_VARARGS,
     STOP_CODE,
     POP_EXCEPT}
+
+if version_info < (3, 5):
+    hasflow |= {WITH_CLEANUP}
+else:
+    hasflow |= {WITH_CLEANUP_START, WITH_CLEANUP_FINISH, SETUP_ASYNC_WITH}
 
 
 class Label:
@@ -602,7 +606,7 @@ class Code(object):
                     op += State(label_pos[arg], cur_state.newstack(1), cur_state.block_stack, inside_finally_block),\
                           State(next_pos, cur_state.stack + (1,), cur_state.block_stack + (BlockType.WITH_BLOCK,), inside_with_block)
 
-                elif o == WITH_CLEANUP:
+                elif version_info < (3, 5) and o == WITH_CLEANUP:
                     # There is special case when 'with' __exit__ function returns True,
                     # that's the signal to silence exception, in this case additional element is pushed
                     # and next END_FINALLY command won't reraise exception.
@@ -610,6 +614,26 @@ class Code(object):
                     silenced_exception_log = cur_state.newlog("WITH_CLEANUP silenced_exception (+1, +block)")
                     op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log),\
                           State(next_pos, cur_state.newstack(-7) + (8,), cur_state.block_stack + (BlockType.SILENCED_EXCEPTION_BLOCK,), silenced_exception_log)
+
+                elif version_info[:2] >= (3, 5) and o == WITH_CLEANUP_START:
+                    # There is special case when 'with' __exit__ function returns True,
+                    # that's the signal to silence exception, in this case additional element is pushed
+                    # and next END_FINALLY command won't reraise exception.
+                    # Emulate this situation on WITH_CLEANUP_START with creating special block which will be
+                    # handled differently by WITH_CLEANUP_FINISH and will cause END_FINALLY not to reraise exception.
+                    log = cur_state.newlog("WITH_CLEANUP_START (+1)")
+                    silenced_exception_log = cur_state.newlog("WITH_CLEANUP_START silenced_exception (+block)")
+                    op += State(next_pos, cur_state.newstack(1), cur_state.block_stack, log),\
+                          State(next_pos, cur_state.newstack(-7) + (9,), cur_state.block_stack + (BlockType.SILENCED_EXCEPTION_BLOCK,), silenced_exception_log)
+
+                elif version_info[:2] >= (3, 5) and o == WITH_CLEANUP_FINISH:
+                    if cur_state.block_stack[-1] == BlockType.SILENCED_EXCEPTION_BLOCK:
+                        # See comment in WITH_CLEANUP_START handler
+                        log = cur_state.newlog("WITH_CLEANUP_FINISH silenced_exception (-1)")
+                        op += State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log),
+                    else:
+                        log = cur_state.newlog("WITH_CLEANUP_FINISH (-2)")
+                        op += State(next_pos, cur_state.newstack(-2), cur_state.block_stack, log),
 
                 else:
                     raise ValueError("Unhandled opcode %s" % o)
