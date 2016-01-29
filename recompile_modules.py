@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # recompile_modules: recompile modules with byteplay, utility for test purposes
 # Copyright (C) 2006-2010 Noam Yorav-Raphael
 # Homepage: http://code.google.com/p/byteplay
