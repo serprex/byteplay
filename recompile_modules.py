@@ -31,9 +31,7 @@ def printcodelist(codelist, to=sys.stdout):
     for i, (op, arg) in enumerate(codelist):
         if isinstance(op, Label):
             pendinglabels.append(op)
-        elif op is SetLineno:
-            pass
-        else:
+        elif op is not SetLineno:
             while pendinglabels:
                 labeldict[pendinglabels.pop()] = i
 
