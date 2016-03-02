@@ -633,8 +633,6 @@ class Code(object):
                         co_lnotab += bytes((incr_pos, incr_lineno))
             elif op == opcode.EXTENDED_ARG:
                 self.code[i + 1][1] |= 1 << 32
-            elif op not in hasarg:
-                co_code += op.to_bytes(2, "little")
             else:
                 if op in hasconst:
                     if isinstance(arg, Code) and\
@@ -657,18 +655,18 @@ class Code(object):
                         arg = index(co_freevars, arg, can_append=False) + len(cellvars)
                     except IndexError:
                         arg = index(co_cellvars, arg)
-                if extended_arg > 0xFFFFFF:
+                if arg > 0xFFFFFF:
                     co_code += (opcode.EXTENDED_ARG | (arg >> 16 & 0xFF00)).to_bytes(2, "little")
-                    if extended_arg > 0xFFFF:
+                    if arg > 0xFFFF:
                         co_code += (opcode.EXTENDED_ARG | (arg >> 8 & 0xFF00)).to_bytes(2, "little")
-                        if extended_arg > 0xFF:
+                        if arg > 0xFF:
                             co_code += (opcode.EXTENDED_ARG | (arg & 0xFF00)).to_bytes(2, "little")
                 co_code += (op | (arg & 0xFF) << 8).to_bytes(2, "little")
 
         for pos, label in jumps:
             jump = label_pos[label]
-            if co_code[pos] in hasjrel:
-                jump -= pos + 3
+            if co_code[pos+2] in hasjrel:
+                jump -= pos + 4
             if jump > 0xFFFF:
                 raise NotImplementedError("Multiple EXTENDED_ARG jumps not implemented")
             co_code[pos + 3] = jump & 0xFF
