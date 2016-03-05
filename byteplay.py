@@ -763,7 +763,7 @@ class Code(object):
                         co_lnotab += b"\xFF\0"
                         incr_pos -= 255
                     while incr_lineno > 255:
-                        co_lnotab += bytes((incr_pos, 255))
+                        co_lnotab += (0xFF00|incr_pos).to_bytes(2, "little")
                         incr_pos = 0
                         incr_lineno -= 255
                     if incr_pos or incr_lineno:
@@ -771,7 +771,7 @@ class Code(object):
             elif op == opcode.EXTENDED_ARG:
                 self.code[i + 1][1] |= 1 << 32
             elif op not in hasarg:
-                co_code += bytes((op,))
+                co_code.append(op)
             else:
                 if op in hasconst:
                     if isinstance(arg, Code) and\
@@ -783,7 +783,7 @@ class Code(object):
                     arg = index(co_names, arg)
                 elif op in hasjump:
                     jumps.append((len(co_code), arg))
-                    co_code += bytes((op, 0, 0))
+                    co_code += op.to_bytes(3, "little")
                     continue
                 elif op in haslocal:
                     arg = index(co_varnames, arg)
@@ -795,8 +795,8 @@ class Code(object):
                     except IndexError:
                         arg = index(co_cellvars, arg)
                 if arg > 0xFFFF:
-                    co_code += bytes((opcode.EXTENDED_ARG, arg >> 16 & 0xFF, arg >> 24 & 0xFF))
-                co_code += bytes((op, arg & 0xFF, arg >> 8 & 0xFF))
+                    co_code += (opcode.EXTENDED_ARG | ((arg & 0xFFFF0000) >> 8)).to_bytes(3, "little")
+                co_code += (op | (arg << 8)).to_bytes(3, "little")
 
         for pos, label in jumps:
             jump = label_pos[label]
@@ -805,7 +805,7 @@ class Code(object):
             if jump > 0xFFFF:
                 raise NotImplementedError("Extended jumps not implemented")
             co_code[pos + 1] = jump & 0xFF
-            co_code[pos + 2] = jump >> 8 & 0xFF
+            co_code[pos + 2] = jump >> 8
 
         co_argcount = len(self.args) - self.varargs - self.varkwargs - self.kwonly
         co_stacksize = self._compute_stacksize()

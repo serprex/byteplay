@@ -1,7 +1,6 @@
 # byteplay: CPython assembler/disassembler
 # Copyright (C) 2006 Noam Raphael | Version: http://code.google.com/p/byteplay
 # Rewritten 2009 Demur Rumed | Version: http://github.com/serprex/byteplay
-#                            Screwed the style over, modified stack logic to be more flexible, updated to Python 3
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -53,9 +52,9 @@ _rf={CALL_FUNCTION:lambda x:-((x&0xFF00)>>7)-(x&0xFF),CALL_FUNCTION_VAR_KW:lambd
 hasflow=opcodes-set(_se)-set(_rf)
 def getse(op,arg=None):
 	if op in _se:return _se[op]
-	if arg is None:raise ValueError,"%s requires arg"%op
+	if arg is None:raise ValueError("%s requires arg"%op)
 	if op in _rf:return _rf[op](arg)
-	raise ValueError,"Unknown %s %s"%(op,arg)
+	raise ValueError("Unknown %s %s"%(op,arg))
 class Label(object):pass
 SetLineno=type("SetLinenoType",(object,),{"__repr__":lambda s:'SetLineno'})
 def isopcode(x):return x is not SetLineno and not isinstance(x,Label)
@@ -262,7 +261,8 @@ class Code(object):
 		label_pos = {}
 		lastlineno = self.firstlineno
 		lastlinepos = 0
-		co_code = co_lnotab = b""
+		co_code = bytearray()
+		co_lnotab = bytearray()
 		for i, (op, arg) in enumerate(self.code):
 			if isinstance(op,Label):label_pos[op] = len(co_code)
 			elif op is SetLineno:
@@ -297,11 +297,11 @@ class Code(object):
 					try:arg=index(co_freevars,arg,can_append=False)+len(cellvars)
 					except IndexError:arg=index(co_cellvars,arg)
 				if arg>0xFFFF:co_code+=b"%c%c%c"%(opcode.EXTENDED_ARG,arg>>16&0xFF,arg>>24&0xFF)
-				co_code+=b"%c%%c%%c"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
-		arg=[]
+				co_code+=b"%c\0\0"%op if arg is None else b"%c%c%c"%(op,arg&0xFF,arg>>8&0xFF)
 		for pos,label in jumps:
 			jump=label_pos[label]
 			if co_code[pos] in hasjrel:jump-=pos+3
 			if jump>0xFFFF:raise NotImplementedError,"Extended jumps not implemented"
-			arg+=jump&0xFF,jump>>8&0xFF
-		return newcode(co_argcount,len(co_varnames),co_stacksize,co_flags,co_code%tuple(arg),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,co_lnotab,co_freevars,tuple(co_cellvars))
+			co_code[pos + 1] = jump & 0xFF
+			co_code[pos + 2] = jump >> 8
+		return newcode(co_argcount,len(co_varnames),co_stacksize,co_flags,bytes(co_code),tuple(co_consts),tuple(co_names),tuple(co_varnames),self.filename,self.name,self.firstlineno,bytes(co_lnotab),co_freevars,tuple(co_cellvars))
