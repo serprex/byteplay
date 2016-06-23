@@ -32,7 +32,6 @@ __all__ = [
     'haslocal',
     'hascompare',
     'hasfree',
-    'hascode',
     'hasconst',
     'Opcode',
     'SetLineno',
@@ -71,7 +70,6 @@ hasjump = hasjabs | hasjrel
 haslocal = {Opcode(x) for x in opcode.haslocal}
 hascompare = {Opcode(x) for x in opcode.hascompare}
 hasfree = {Opcode(x) for x in opcode.hasfree}
-hascode = {MAKE_FUNCTION, MAKE_CLOSURE}
 
 STOP_CODE = -1
 from dis import stack_effect
@@ -211,17 +209,6 @@ class Code(object):
             if i in linestarts:
                 code.append((SetLineno, linestarts[i]))
             op = Opcode(co_code[i])
-            if op in hascode:
-                lastop, lastarg = code[-2]
-                if lastop != LOAD_CONST:
-                    raise ValueError("%s should be preceded by LOAD_CONST" % op)
-
-                sub_code = Code.from_code(lastarg)
-                if sub_code is None:
-                    print(co.co_name + ': has unexpected subcode block')
-                    return None
-
-                code[-2] = (LOAD_CONST, sub_code)
             arg = co_code[i+1] | extended_arg
             if op == opcode.EXTENDED_ARG:
                 extended_arg = arg << 8
@@ -635,10 +622,6 @@ class Code(object):
                 self.code[i + 1][1] |= 1 << 32
             else:
                 if op in hasconst:
-                    if isinstance(arg, Code) and\
-                            i + 2 < len(self.code) and self.code[i + 2][0] in hascode:
-                        arg = arg.to_code(from_function=is_function)
-                        assert arg is not None
                     arg = index(co_consts, arg, 0)
                 elif op in hasname:
                     arg = index(co_names, arg)
@@ -657,10 +640,10 @@ class Code(object):
                         arg = index(co_cellvars, arg)
                 if arg > 0xFFFFFF:
                     co_code += (opcode.EXTENDED_ARG | (arg >> 16 & 0xFF00)).to_bytes(2, "little")
-                    if arg > 0xFFFF:
-                        co_code += (opcode.EXTENDED_ARG | (arg >> 8 & 0xFF00)).to_bytes(2, "little")
-                        if arg > 0xFF:
-                            co_code += (opcode.EXTENDED_ARG | (arg & 0xFF00)).to_bytes(2, "little")
+                if arg > 0xFFFF:
+                    co_code += (opcode.EXTENDED_ARG | (arg >> 8 & 0xFF00)).to_bytes(2, "little")
+                if arg > 0xFF:
+                    co_code += (opcode.EXTENDED_ARG | (arg & 0xFF00)).to_bytes(2, "little")
                 co_code += (op | (arg & 0xFF) << 8).to_bytes(2, "little")
 
         for pos, label in jumps:
