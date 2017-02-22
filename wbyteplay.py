@@ -25,6 +25,7 @@ __all__ = [
     'hasflow',
     'stack_effect',
     'cmp_op',
+    'hasarg',
     'hasname',
     'hasjrel',
     'hasjabs',
@@ -33,6 +34,7 @@ __all__ = [
     'hascompare',
     'hasfree',
     'hasconst',
+    'hascode',
     'Opcode',
     'SetLineno',
     'Label',
@@ -42,7 +44,7 @@ __all__ = [
 
 from sys import version_info
 if version_info < (3, 6):
-    raise NotImplementedError("Currently only Python versions 3.5 are supported!")
+    raise NotImplementedError("Currently only Python versions >3.5 are supported!")
 
 import opcode
 from dis import findlabels
@@ -62,6 +64,8 @@ for cmp_op, hasname in opmap.items():
     __all__.append(cmp_op)
 cmp_op = opcode.cmp_op
 
+
+hasarg = {x for x in opcodes if x >= opcode.HAVE_ARGUMENT}
 hasconst = {Opcode(x) for x in opcode.hasconst}
 hasname = {Opcode(x) for x in opcode.hasname}
 hasjrel = {Opcode(x) for x in opcode.hasjrel}
@@ -70,9 +74,16 @@ hasjump = hasjabs | hasjrel
 haslocal = {Opcode(x) for x in opcode.haslocal}
 hascompare = {Opcode(x) for x in opcode.hascompare}
 hasfree = {Opcode(x) for x in opcode.hasfree}
+hascode = {MAKE_FUNCTION}
 
 STOP_CODE = -1
 from dis import stack_effect
+
+# Fix bug in Python 3.6.0 (fixed in 3.6.1)
+if version_info == (3, 6, 0):
+    def stack_effect(o, arg):
+        return (stack_effect(o, arg) if o != CALL_FUNCTION_EX else
+                -2 if arg else -1)
 
 hasflow = hasjump | {
     POP_BLOCK,
@@ -103,15 +114,16 @@ def isopcode(x):
 
 
 # Flags for codeobject.co_flags, taken from Include/code.h, other flags are no longer used
-CO_OPTIMIZED   = 0x0001
-CO_NEWLOCALS   = 0x0002
-CO_VARARGS     = 0x0004
-CO_VARKEYWORDS = 0x0008
-CO_NESTED      = 0x0010
-CO_GENERATOR   = 0x0020
-CO_NOFREE      = 0x0040
+CO_OPTIMIZED          = 0x0001
+CO_NEWLOCALS          = 0x0002
+CO_VARARGS            = 0x0004
+CO_VARKEYWORDS        = 0x0008
+CO_NESTED             = 0x0010
+CO_GENERATOR          = 0x0020
+CO_NOFREE             = 0x0040
 CO_COROUTINE          = 0x0080
 CO_ITERABLE_COROUTINE = 0x0100
+CO_ASYNC_GENERATOR    = 0x0200
 
 CO_FUTURE_BARRY_AS_BDFL = 0x40000
 
@@ -140,6 +152,8 @@ class Code(object):
         force_coroutine - set CO_COROUTINE in co_flags for coroutine Code objects (native coroutines) without coroutine-specific code
         force_iterable_coroutine - set CO_ITERABLE_COROUTINE in co_flags for generator-based coroutine Code objects
         future_generator_stop - set CO_FUTURE_GENERATOR_STOP flag (see PEP-479)
+    Python 3.6:
+        force_async_generator - set CO_ASYNC_GENERATOR in co_flags
 
     Not affecting action
     name - string: the name of the code (co_name)
@@ -154,7 +168,8 @@ class Code(object):
     def __init__(self, code, freevars, args, kwonly, varargs, varkwargs, newlocals,
                  name, filename, firstlineno, docstring,
                  force_generator=False,
-                 *, force_coroutine=None, force_iterable_coroutine=None, future_generator_stop=None):
+                 *, force_coroutine=False, force_iterable_coroutine=False,
+                 force_async_generator=False, future_generator_stop=False):
         self.code = code
         self.freevars = freevars
         self.args = args
@@ -169,6 +184,7 @@ class Code(object):
         self.force_generator = force_generator
         self.force_coroutine = force_coroutine
         self.force_iterable_coroutine = force_iterable_coroutine
+        self.force_async_generator = force_async_generator
         self.future_generator_stop = future_generator_stop
 
     @staticmethod
@@ -210,9 +226,23 @@ class Code(object):
                 code.append((SetLineno, linestarts[i]))
             op = Opcode(co_code[i])
             arg = co_code[i+1] | extended_arg
+            if op in hascode:
+                lastop, lastarg = code[-2]
+                if lastop != LOAD_CONST:
+                    raise ValueError("%s should be preceded by LOAD_CONST" % op)
+
+                sub_code = Code.from_code(lastarg)
+                if sub_code is None:
+                    print(co.co_name + ': has unexpected subcode block')
+                    return None
+
+                code[-2] = (LOAD_CONST, sub_code)
             if op == opcode.EXTENDED_ARG:
                 extended_arg = arg << 8
             else:
+                if op not in hasarg:
+                    code.append((op, None))
+                    continue
                 extended_arg = 0
                 byteplay_arg = co.co_consts[arg] if op in hasconst else \
                                co.co_names[arg] if op in hasname else \
@@ -232,11 +262,17 @@ class Code(object):
 
         varargs = not not co.co_flags & CO_VARARGS
         varkwargs = not not co.co_flags & CO_VARKEYWORDS
-        force_generator = not is_generator and (co.co_flags & CO_GENERATOR)
 
         force_coroutine = not is_coroutine and (co.co_flags & CO_COROUTINE)
         force_iterable_coroutine = co.co_flags & CO_ITERABLE_COROUTINE
+        force_async_generator = co.co_flags & CO_ASYNC_GENERATOR
+
+        is_generator = False if force_async_generator else is_generator
+        force_generator = not is_generator and (co.co_flags & CO_GENERATOR)
+
         assert not (force_coroutine and force_iterable_coroutine)
+        assert not (force_coroutine and force_async_generator)
+        assert not (force_iterable_coroutine and force_async_generator)
         future_generator_stop = co.co_flags & CO_FUTURE_GENERATOR_STOP
 
         return cls(code=code,
@@ -253,6 +289,7 @@ class Code(object):
                    force_generator=force_generator,
                    force_coroutine=force_coroutine,
                    force_iterable_coroutine=force_iterable_coroutine,
+                   force_async_generator=force_async_generator,
                    future_generator_stop=future_generator_stop)
 
     def __eq__(self, other):
@@ -273,7 +310,8 @@ class Code(object):
             else:
                 if (self.force_coroutine != other.force_coroutine or
                         self.force_iterable_coroutine != other.force_iterable_coroutine or
-                        self.future_generator_stop != other.future_generator_stop):
+                        self.future_generator_stop != other.future_generator_stop or
+                        self.force_async_generator != other.force_async_generator):
                     return False
 
 
@@ -425,11 +463,7 @@ class Code(object):
                     op += State(next_pos, cur_state.stack, cur_state.block_stack, cur_state.log),
 
                 elif o not in hasflow:
-                    if o in (LOAD_GLOBAL, LOAD_CONST, LOAD_NAME, LOAD_FAST, LOAD_ATTR, LOAD_DEREF,
-                             LOAD_CLASSDEREF, LOAD_CLOSURE,
-                             STORE_GLOBAL, STORE_NAME, STORE_FAST, STORE_ATTR, STORE_DEREF,
-                             DELETE_GLOBAL, DELETE_NAME, DELETE_FAST, DELETE_ATTR, DELETE_DEREF,
-                             IMPORT_NAME, IMPORT_FROM, COMPARE_OP):
+                    if o in hasarg and not isinstance(arg, int):
                         se = stack_effect(o, 0)
                     else:
                         se = stack_effect(o, arg)
@@ -551,11 +585,17 @@ class Code(object):
 
         co_flags = {op[0] for op in self.code}
 
-        is_generator = self.force_generator or (YIELD_VALUE in co_flags or YIELD_FROM in co_flags)
+        if not self.force_async_generator:
+            is_generator = (self.force_generator or
+                            (YIELD_VALUE in co_flags or YIELD_FROM in co_flags)
+                            )
+        else:
+            is_generator = False
         no_free = (not self.freevars) and (not co_flags & hasfree)
 
         is_native_coroutine = bool(self.force_coroutine or (co_flags & coroutine_opcodes))
         assert not (is_native_coroutine and self.force_iterable_coroutine)
+        assert not (is_native_coroutine and self.force_async_generator)
 
         co_flags =\
             (not(STORE_NAME in co_flags or LOAD_NAME in co_flags or DELETE_NAME in co_flags)) |\
@@ -568,7 +608,8 @@ class Code(object):
 
         co_flags |= (is_native_coroutine and CO_COROUTINE) |\
                     (self.force_iterable_coroutine and CO_ITERABLE_COROUTINE) |\
-                    (self.future_generator_stop and CO_FUTURE_GENERATOR_STOP)
+                    (self.future_generator_stop and CO_FUTURE_GENERATOR_STOP) |\
+                    (self.force_async_generator and CO_ASYNC_GENERATOR)
 
         co_consts = [self.docstring]
         co_names = []
@@ -622,6 +663,11 @@ class Code(object):
                 self.code[i + 1][1] |= 1 << 32
             else:
                 if op in hasconst:
+                    if (isinstance(arg, Code) and
+                            i + 2 < len(self.code) and
+                            self.code[i + 2][0] in hascode):
+                        arg = arg.to_code(from_function=is_function)
+                        assert arg is not None
                     arg = index(co_consts, arg, 0)
                 elif op in hasname:
                     arg = index(co_names, arg)
@@ -638,6 +684,8 @@ class Code(object):
                         arg = index(co_freevars, arg, can_append=False) + len(cellvars)
                     except IndexError:
                         arg = index(co_cellvars, arg)
+                if arg is None:
+                    arg = 0
                 if arg > 0xFFFFFF:
                     co_code += (opcode.EXTENDED_ARG | (arg >> 16 & 0xFF00)).to_bytes(2, "little")
                 if arg > 0xFFFF:
