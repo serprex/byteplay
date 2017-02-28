@@ -591,7 +591,7 @@ class Code(object):
                     op += State(label_pos[arg], cur_state.stack, cur_state.block_stack, after_jump_log),\
                           State(next_pos, cur_state.newstack(-1), cur_state.block_stack, log)
 
-                elif o in {POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE}:
+                elif o in (POP_JUMP_IF_TRUE, POP_JUMP_IF_FALSE):
                     after_jump_log = cur_state.newlog(str(o) + ", jumped (-1)")
                     log = cur_state.newlog(str(o) + ", not jumped (-1)")
                     op += State(label_pos[arg], cur_state.newstack(-1), cur_state.block_stack, after_jump_log),\

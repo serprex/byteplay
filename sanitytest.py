@@ -6,7 +6,9 @@ from sys import version_info
 from dis import dis
 try:
     from dis import HAVE_ARGUMENT
-    if version_info.major == 3:from byteplay import *
+    if version_info.major == 3:
+        if version_info.minor < 6:from byteplay import *
+        else:from wbyteplay import *
     else:from byteplay2 import *
 except ImportError:
     from wbyteplay import *
