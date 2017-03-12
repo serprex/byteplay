@@ -116,7 +116,7 @@ def recompile(filename, insert_reassembly_stamp=True):
 
     if insert_reassembly_stamp:
         message = "reassembled %r imported.\n" % filename
-        cod.code[:0] = [  # __import__('sys').stderr.write(message)
+        cod.code[:0] = (  # __import__('sys').stderr.write(message)
             (LOAD_GLOBAL, '__import__'),
             (LOAD_CONST, 'sys'),
             (CALL_FUNCTION, 1),
@@ -125,7 +125,7 @@ def recompile(filename, insert_reassembly_stamp=True):
             (LOAD_CONST, message),
             (CALL_FUNCTION, 1),
             (POP_TOP, None),
-        ]
+        )
 
     codeobject2 = cod.to_code()
     optimize = -1
