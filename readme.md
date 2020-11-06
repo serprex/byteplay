@@ -2,4 +2,4 @@
 
 https://wiki.python.org/moin/ByteplayDoc
 
-A more modern API is being developed @ https://github.com/haypo/bytecode
+A more modern API is being developed @ https://github.com/vstinner/bytecode
